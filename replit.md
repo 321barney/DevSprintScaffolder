@@ -1,9 +1,9 @@
-# SoukMatch - Morocco Marketplace MVP
+# Trip to Work - Morocco Tourism & Service Platform
 
 **Last Updated:** October 28, 2025
 
 ## Overview
-SoukMatch is a Morocco-first marketplace web application where buyers post jobs (transport, tours, services, car financing) and service providers submit competitive bids. The platform features AI-assisted pricing, offer scoring, provider KYC verification, multi-language support (FR/AR/EN with RTL), messaging, and ratings functionality.
+Trip to Work is a Morocco-focused tourism and service platform where tourists and buyers can discover and book services from verified providers (transport, tours, handymen, guides). Providers build their brand with public profiles, photo portfolios, and verified credentials. The platform features maps integration, GPS tracking, AI-assisted pricing, photo uploads, and multi-language support (FR/AR/EN with RTL).
 
 ## Current Status: Phase 1 Monetization Complete ✅
 

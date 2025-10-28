@@ -3,8 +3,8 @@ export type Locale = 'fr-MA' | 'ar-MA' | 'en-US';
 
 export const translations = {
   'fr-MA': {
-    'app.title': 'SoukMatch',
-    'app.tagline': 'Votre marketplace de confiance au Maroc',
+    'app.title': 'Trip to Work',
+    'app.tagline': 'Plateforme tourisme et services au Maroc',
     'nav.home': 'Accueil',
     'nav.jobs': 'Travaux',
     'nav.messages': 'Messages',
@@ -52,8 +52,8 @@ export const translations = {
     'time.hours': 'heures',
   },
   'ar-MA': {
-    'app.title': 'سوق ماتش',
-    'app.tagline': 'سوقك الموثوق في المغرب',
+    'app.title': 'Trip to Work',
+    'app.tagline': 'منصة السياحة والخدمات في المغرب',
     'nav.home': 'الرئيسية',
     'nav.jobs': 'الأعمال',
     'nav.messages': 'الرسائل',
@@ -101,8 +101,8 @@ export const translations = {
     'time.hours': 'ساعات',
   },
   'en-US': {
-    'app.title': 'SoukMatch',
-    'app.tagline': 'Your trusted marketplace in Morocco',
+    'app.title': 'Trip to Work',
+    'app.tagline': 'Morocco tourism and service platform',
     'nav.home': 'Home',
     'nav.jobs': 'Jobs',
     'nav.messages': 'Messages',

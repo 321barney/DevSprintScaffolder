@@ -1,4 +1,4 @@
-// Seed data for SoukMatch marketplace
+// Seed data for Trip to Work platform
 import bcrypt from 'bcrypt';
 import { storage } from './storage';
 
