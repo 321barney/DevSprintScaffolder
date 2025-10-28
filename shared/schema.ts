@@ -256,3 +256,185 @@ export type InsertRating = z.infer<typeof insertRatingSchema>;
 
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
+
+// ========================================
+// PHASE 1: Payment & Commission Tables
+// ========================================
+
+// Platform Fees - Commission on accepted offers
+export const platformFees = pgTable("platform_fees", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  offerId: uuid("offer_id").references(() => offers.id).notNull(),
+  jobId: uuid("job_id").references(() => jobs.id).notNull(),
+  providerId: uuid("provider_id").references(() => providers.id).notNull(),
+  grossAmountMad: integer("gross_amount_mad").notNull(),
+  commissionRate: decimal("commission_rate", { precision: 5, scale: 4 }).notNull(),
+  commissionAmountMad: integer("commission_amount_mad").notNull(),
+  providerNetMad: integer("provider_net_mad").notNull(),
+  status: text("status").default("pending").notNull().$type<"pending" | "collected" | "failed">(),
+  paidAt: timestamp("paid_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const platformFeesRelations = relations(platformFees, ({ one }) => ({
+  offer: one(offers, {
+    fields: [platformFees.offerId],
+    references: [offers.id],
+  }),
+  job: one(jobs, {
+    fields: [platformFees.jobId],
+    references: [jobs.id],
+  }),
+  provider: one(providers, {
+    fields: [platformFees.providerId],
+    references: [providers.id],
+  }),
+}));
+
+// Provider Subscriptions - Free, Basic, Pro tiers
+export const providerSubscriptions = pgTable("provider_subscriptions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  providerId: uuid("provider_id").references(() => providers.id).unique().notNull(),
+  tier: text("tier").default("free").notNull().$type<"free" | "basic" | "pro">(),
+  freeOffersRemaining: integer("free_offers_remaining").default(4).notNull(),
+  paidOffersSubmitted: integer("paid_offers_submitted").default(0).notNull(),
+  commissionRate: decimal("commission_rate", { precision: 5, scale: 4 }),
+  subscriptionStartedAt: timestamp("subscription_started_at"),
+  subscriptionExpiresAt: timestamp("subscription_expires_at"),
+  autoRenew: boolean("auto_renew").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const providerSubscriptionsRelations = relations(providerSubscriptions, ({ one }) => ({
+  provider: one(providers, {
+    fields: [providerSubscriptions.providerId],
+    references: [providers.id],
+  }),
+}));
+
+// Transactions - Payments for subscriptions and payouts
+export const transactions = pgTable("transactions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  providerId: uuid("provider_id").references(() => providers.id).notNull(),
+  type: text("type").notNull().$type<"subscription_payment" | "provider_payout" | "refund">(),
+  amountMad: integer("amount_mad").notNull(),
+  currency: text("currency").default("MAD").notNull(),
+  status: text("status").default("pending").notNull().$type<"pending" | "processing" | "completed" | "failed" | "refunded">(),
+  pspProvider: text("psp_provider"),
+  pspTransactionId: text("psp_transaction_id"),
+  pspResponse: jsonb("psp_response"),
+  metadata: jsonb("metadata"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const transactionsRelations = relations(transactions, ({ one }) => ({
+  provider: one(providers, {
+    fields: [transactions.providerId],
+    references: [providers.id],
+  }),
+}));
+
+// Provider Earnings - Track net income after commissions
+export const providerEarnings = pgTable("provider_earnings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  providerId: uuid("provider_id").references(() => providers.id).notNull(),
+  offerId: uuid("offer_id").references(() => offers.id).notNull(),
+  jobId: uuid("job_id").references(() => jobs.id).notNull(),
+  grossAmountMad: integer("gross_amount_mad").notNull(),
+  commissionAmountMad: integer("commission_amount_mad").notNull(),
+  netAmountMad: integer("net_amount_mad").notNull(),
+  status: text("status").default("pending").notNull().$type<"pending" | "available" | "paid_out">(),
+  paidOutAt: timestamp("paid_out_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const providerEarningsRelations = relations(providerEarnings, ({ one }) => ({
+  provider: one(providers, {
+    fields: [providerEarnings.providerId],
+    references: [providers.id],
+  }),
+  offer: one(offers, {
+    fields: [providerEarnings.offerId],
+    references: [offers.id],
+  }),
+  job: one(jobs, {
+    fields: [providerEarnings.jobId],
+    references: [jobs.id],
+  }),
+}));
+
+// Phase 1 Insert Schemas
+export const insertPlatformFeeSchema = createInsertSchema(platformFees).omit({ 
+  id: true, 
+  createdAt: true,
+  status: true,
+  paidAt: true,
+});
+
+export const insertProviderSubscriptionSchema = createInsertSchema(providerSubscriptions).omit({ 
+  id: true, 
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertTransactionSchema = createInsertSchema(transactions).omit({ 
+  id: true, 
+  createdAt: true,
+  completedAt: true,
+  status: true,
+});
+
+export const insertProviderEarningSchema = createInsertSchema(providerEarnings).omit({ 
+  id: true, 
+  createdAt: true,
+  status: true,
+  paidOutAt: true,
+});
+
+// Phase 1 Select Types
+export type PlatformFee = typeof platformFees.$inferSelect;
+export type InsertPlatformFee = z.infer<typeof insertPlatformFeeSchema>;
+
+export type ProviderSubscription = typeof providerSubscriptions.$inferSelect;
+export type InsertProviderSubscription = z.infer<typeof insertProviderSubscriptionSchema>;
+
+export type Transaction = typeof transactions.$inferSelect;
+export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
+
+export type ProviderEarning = typeof providerEarnings.$inferSelect;
+export type InsertProviderEarning = z.infer<typeof insertProviderEarningSchema>;
+
+// Commission Configuration Constants
+export const COMMISSION_CONFIG = {
+  transport: 0.12,  // 12%
+  tour: 0.18,       // 18%
+  service: 0.15,    // 15%
+  financing: 0.20,  // 20%
+  default: 0.15,    // 15%
+} as const;
+
+export const SUBSCRIPTION_TIERS = {
+  free: {
+    name: "Free",
+    priceMAD: 0,
+    offersIncluded: 4,
+    commissionRate: null, // Uses category default
+    maxOffers: 4,
+  },
+  basic: {
+    name: "Basic",
+    priceMAD: 299,
+    offersIncluded: 50,
+    commissionRate: 0.12, // 12%
+    maxOffers: 50,
+  },
+  pro: {
+    name: "Pro",
+    priceMAD: 799,
+    offersIncluded: null, // Unlimited
+    commissionRate: 0.10, // 10%
+    maxOffers: null,
+  },
+} as const;
