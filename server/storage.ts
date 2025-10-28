@@ -3,6 +3,7 @@ import {
   users, providers, jobs, offers, financingOffers, messages, ratings,
   platformFees, providerSubscriptions, transactions, providerEarnings,
   providerProfiles, vehicles, providerDocuments, trips, tripTracks,
+  companies, costCenters, travelerProfiles, venues, venueRooms, rfps, quotes, groupBookings, approvals,
   type User, type InsertUser,
   type Provider, type InsertProvider,
   type Job, type InsertJob,
@@ -19,6 +20,15 @@ import {
   type ProviderDocument, type InsertProviderDocument,
   type Trip, type InsertTrip,
   type TripTrack, type InsertTripTrack,
+  type Company, type InsertCompany,
+  type CostCenter, type InsertCostCenter,
+  type TravelerProfile, type InsertTravelerProfile,
+  type Venue, type InsertVenue,
+  type VenueRoom, type InsertVenueRoom,
+  type Rfp, type InsertRfp,
+  type Quote, type InsertQuote,
+  type GroupBooking, type InsertGroupBooking,
+  type Approval, type InsertApproval,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc } from "drizzle-orm";
@@ -109,6 +119,67 @@ export interface IStorage {
   // Phase 2: Trip Tracks
   getTripTracksByTripId(tripId: string): Promise<TripTrack[]>;
   createTripTrack(track: InsertTripTrack): Promise<TripTrack>;
+
+  // Phase 3: Companies
+  getCompany(id: string): Promise<Company | undefined>;
+  getCompaniesByIndustry(industry: string): Promise<Company[]>;
+  createCompany(company: InsertCompany): Promise<Company>;
+  updateCompany(id: string, data: Partial<Company>): Promise<Company | undefined>;
+
+  // Phase 3: Cost Centers
+  getCostCenter(id: string): Promise<CostCenter | undefined>;
+  getCostCentersByCompanyId(companyId: string): Promise<CostCenter[]>;
+  createCostCenter(costCenter: InsertCostCenter): Promise<CostCenter>;
+  updateCostCenter(id: string, data: Partial<CostCenter>): Promise<CostCenter | undefined>;
+
+  // Phase 3: Traveler Profiles
+  getTravelerProfile(id: string): Promise<TravelerProfile | undefined>;
+  getTravelerProfilesByCompanyId(companyId: string): Promise<TravelerProfile[]>;
+  getTravelerProfileByUserId(userId: string): Promise<TravelerProfile | undefined>;
+  createTravelerProfile(profile: InsertTravelerProfile): Promise<TravelerProfile>;
+  updateTravelerProfile(id: string, data: Partial<TravelerProfile>): Promise<TravelerProfile | undefined>;
+
+  // Phase 3: Venues
+  getVenue(id: string): Promise<Venue | undefined>;
+  getVenues(filters?: { city?: string; type?: string; verified?: boolean; invoiceReady?: boolean }): Promise<Venue[]>;
+  getVenuesByProviderId(providerId: string): Promise<Venue[]>;
+  createVenue(venue: InsertVenue): Promise<Venue>;
+  updateVenue(id: string, data: Partial<Venue>): Promise<Venue | undefined>;
+
+  // Phase 3: Venue Rooms
+  getVenueRoom(id: string): Promise<VenueRoom | undefined>;
+  getVenueRoomsByVenueId(venueId: string): Promise<VenueRoom[]>;
+  createVenueRoom(room: InsertVenueRoom): Promise<VenueRoom>;
+  updateVenueRoom(id: string, data: Partial<VenueRoom>): Promise<VenueRoom | undefined>;
+
+  // Phase 3: RFPs
+  getRfp(id: string): Promise<Rfp | undefined>;
+  getRfpsByCompanyId(companyId: string): Promise<Rfp[]>;
+  getOpenRfps(): Promise<Rfp[]>;
+  createRfp(rfp: InsertRfp): Promise<Rfp>;
+  updateRfp(id: string, data: Partial<Rfp>): Promise<Rfp | undefined>;
+
+  // Phase 3: Quotes
+  getQuote(id: string): Promise<Quote | undefined>;
+  getQuotesByRfpId(rfpId: string): Promise<Quote[]>;
+  getQuotesByProviderId(providerId: string): Promise<Quote[]>;
+  createQuote(quote: InsertQuote): Promise<Quote>;
+  updateQuote(id: string, data: Partial<Quote>): Promise<Quote | undefined>;
+
+  // Phase 3: Group Bookings
+  getGroupBooking(id: string): Promise<GroupBooking | undefined>;
+  getGroupBookingsByCompanyId(companyId: string): Promise<GroupBooking[]>;
+  getGroupBookingsByVenueId(venueId: string): Promise<GroupBooking[]>;
+  createGroupBooking(booking: InsertGroupBooking): Promise<GroupBooking>;
+  updateGroupBooking(id: string, data: Partial<GroupBooking>): Promise<GroupBooking | undefined>;
+
+  // Phase 3: Approvals
+  getApproval(id: string): Promise<Approval | undefined>;
+  getApprovalsByCompanyId(companyId: string): Promise<Approval[]>;
+  getApprovalsByApproverId(approverId: string): Promise<Approval[]>;
+  getPendingApprovals(approverId: string): Promise<Approval[]>;
+  createApproval(approval: InsertApproval): Promise<Approval>;
+  updateApproval(id: string, data: Partial<Approval>): Promise<Approval | undefined>;
 }
 
 // Database storage implementation
@@ -546,6 +617,235 @@ export class DatabaseStorage implements IStorage {
       .values(insertTrack as any)
       .returning();
     return track;
+  }
+
+  // Phase 3: Companies
+  async getCompany(id: string): Promise<Company | undefined> {
+    const [company] = await db.select().from(companies).where(eq(companies.id, id));
+    return company || undefined;
+  }
+
+  async getCompaniesByIndustry(industry: string): Promise<Company[]> {
+    return await db.select().from(companies).where(eq(companies.industry, industry));
+  }
+
+  async createCompany(insertCompany: InsertCompany): Promise<Company> {
+    const [company] = await db.insert(companies).values(insertCompany as any).returning();
+    return company;
+  }
+
+  async updateCompany(id: string, data: Partial<Company>): Promise<Company | undefined> {
+    const [company] = await db.update(companies).set(data as any).where(eq(companies.id, id)).returning();
+    return company || undefined;
+  }
+
+  // Phase 3: Cost Centers
+  async getCostCenter(id: string): Promise<CostCenter | undefined> {
+    const [center] = await db.select().from(costCenters).where(eq(costCenters.id, id));
+    return center || undefined;
+  }
+
+  async getCostCentersByCompanyId(companyId: string): Promise<CostCenter[]> {
+    return await db.select().from(costCenters).where(eq(costCenters.companyId, companyId));
+  }
+
+  async createCostCenter(insertCenter: InsertCostCenter): Promise<CostCenter> {
+    const [center] = await db.insert(costCenters).values(insertCenter as any).returning();
+    return center;
+  }
+
+  async updateCostCenter(id: string, data: Partial<CostCenter>): Promise<CostCenter | undefined> {
+    const [center] = await db.update(costCenters).set(data as any).where(eq(costCenters.id, id)).returning();
+    return center || undefined;
+  }
+
+  // Phase 3: Traveler Profiles
+  async getTravelerProfile(id: string): Promise<TravelerProfile | undefined> {
+    const [profile] = await db.select().from(travelerProfiles).where(eq(travelerProfiles.id, id));
+    return profile || undefined;
+  }
+
+  async getTravelerProfilesByCompanyId(companyId: string): Promise<TravelerProfile[]> {
+    return await db.select().from(travelerProfiles).where(eq(travelerProfiles.companyId, companyId));
+  }
+
+  async getTravelerProfileByUserId(userId: string): Promise<TravelerProfile | undefined> {
+    const [profile] = await db.select().from(travelerProfiles).where(eq(travelerProfiles.userId, userId));
+    return profile || undefined;
+  }
+
+  async createTravelerProfile(insertProfile: InsertTravelerProfile): Promise<TravelerProfile> {
+    const [profile] = await db.insert(travelerProfiles).values(insertProfile as any).returning();
+    return profile;
+  }
+
+  async updateTravelerProfile(id: string, data: Partial<TravelerProfile>): Promise<TravelerProfile | undefined> {
+    const [profile] = await db.update(travelerProfiles).set(data as any).where(eq(travelerProfiles.id, id)).returning();
+    return profile || undefined;
+  }
+
+  // Phase 3: Venues
+  async getVenue(id: string): Promise<Venue | undefined> {
+    const [venue] = await db.select().from(venues).where(eq(venues.id, id));
+    return venue || undefined;
+  }
+
+  async getVenues(filters?: { city?: string; type?: string; verified?: boolean; invoiceReady?: boolean }): Promise<Venue[]> {
+    let query = db.select().from(venues);
+    const conditions = [];
+    
+    if (filters?.city) {
+      conditions.push(eq(venues.city, filters.city));
+    }
+    if (filters?.type) {
+      conditions.push(eq(venues.type, filters.type as any));
+    }
+    if (filters?.verified !== undefined) {
+      conditions.push(eq(venues.verified, filters.verified));
+    }
+    if (filters?.invoiceReady !== undefined) {
+      conditions.push(eq(venues.invoiceReady, filters.invoiceReady));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+
+    return await query.orderBy(desc(venues.createdAt));
+  }
+
+  async getVenuesByProviderId(providerId: string): Promise<Venue[]> {
+    return await db.select().from(venues).where(eq(venues.providerId, providerId)).orderBy(desc(venues.createdAt));
+  }
+
+  async createVenue(insertVenue: InsertVenue): Promise<Venue> {
+    const [venue] = await db.insert(venues).values(insertVenue as any).returning();
+    return venue;
+  }
+
+  async updateVenue(id: string, data: Partial<Venue>): Promise<Venue | undefined> {
+    const [venue] = await db.update(venues).set(data as any).where(eq(venues.id, id)).returning();
+    return venue || undefined;
+  }
+
+  // Phase 3: Venue Rooms
+  async getVenueRoom(id: string): Promise<VenueRoom | undefined> {
+    const [room] = await db.select().from(venueRooms).where(eq(venueRooms.id, id));
+    return room || undefined;
+  }
+
+  async getVenueRoomsByVenueId(venueId: string): Promise<VenueRoom[]> {
+    return await db.select().from(venueRooms).where(eq(venueRooms.venueId, venueId));
+  }
+
+  async createVenueRoom(insertRoom: InsertVenueRoom): Promise<VenueRoom> {
+    const [room] = await db.insert(venueRooms).values(insertRoom as any).returning();
+    return room;
+  }
+
+  async updateVenueRoom(id: string, data: Partial<VenueRoom>): Promise<VenueRoom | undefined> {
+    const [room] = await db.update(venueRooms).set(data as any).where(eq(venueRooms.id, id)).returning();
+    return room || undefined;
+  }
+
+  // Phase 3: RFPs
+  async getRfp(id: string): Promise<Rfp | undefined> {
+    const [rfp] = await db.select().from(rfps).where(eq(rfps.id, id));
+    return rfp || undefined;
+  }
+
+  async getRfpsByCompanyId(companyId: string): Promise<Rfp[]> {
+    return await db.select().from(rfps).where(eq(rfps.companyId, companyId)).orderBy(desc(rfps.createdAt));
+  }
+
+  async getOpenRfps(): Promise<Rfp[]> {
+    return await db.select().from(rfps).where(eq(rfps.status, "published")).orderBy(desc(rfps.publishedAt));
+  }
+
+  async createRfp(insertRfp: InsertRfp): Promise<Rfp> {
+    const [rfp] = await db.insert(rfps).values(insertRfp as any).returning();
+    return rfp;
+  }
+
+  async updateRfp(id: string, data: Partial<Rfp>): Promise<Rfp | undefined> {
+    const [rfp] = await db.update(rfps).set(data as any).where(eq(rfps.id, id)).returning();
+    return rfp || undefined;
+  }
+
+  // Phase 3: Quotes
+  async getQuote(id: string): Promise<Quote | undefined> {
+    const [quote] = await db.select().from(quotes).where(eq(quotes.id, id));
+    return quote || undefined;
+  }
+
+  async getQuotesByRfpId(rfpId: string): Promise<Quote[]> {
+    return await db.select().from(quotes).where(eq(quotes.rfpId, rfpId)).orderBy(desc(quotes.submittedAt));
+  }
+
+  async getQuotesByProviderId(providerId: string): Promise<Quote[]> {
+    return await db.select().from(quotes).where(eq(quotes.providerId, providerId)).orderBy(desc(quotes.submittedAt));
+  }
+
+  async createQuote(insertQuote: InsertQuote): Promise<Quote> {
+    const [quote] = await db.insert(quotes).values(insertQuote as any).returning();
+    return quote;
+  }
+
+  async updateQuote(id: string, data: Partial<Quote>): Promise<Quote | undefined> {
+    const [quote] = await db.update(quotes).set(data as any).where(eq(quotes.id, id)).returning();
+    return quote || undefined;
+  }
+
+  // Phase 3: Group Bookings
+  async getGroupBooking(id: string): Promise<GroupBooking | undefined> {
+    const [booking] = await db.select().from(groupBookings).where(eq(groupBookings.id, id));
+    return booking || undefined;
+  }
+
+  async getGroupBookingsByCompanyId(companyId: string): Promise<GroupBooking[]> {
+    return await db.select().from(groupBookings).where(eq(groupBookings.companyId, companyId)).orderBy(desc(groupBookings.createdAt));
+  }
+
+  async getGroupBookingsByVenueId(venueId: string): Promise<GroupBooking[]> {
+    return await db.select().from(groupBookings).where(eq(groupBookings.venueId, venueId)).orderBy(desc(groupBookings.createdAt));
+  }
+
+  async createGroupBooking(insertBooking: InsertGroupBooking): Promise<GroupBooking> {
+    const [booking] = await db.insert(groupBookings).values(insertBooking as any).returning();
+    return booking;
+  }
+
+  async updateGroupBooking(id: string, data: Partial<GroupBooking>): Promise<GroupBooking | undefined> {
+    const [booking] = await db.update(groupBookings).set(data as any).where(eq(groupBookings.id, id)).returning();
+    return booking || undefined;
+  }
+
+  // Phase 3: Approvals
+  async getApproval(id: string): Promise<Approval | undefined> {
+    const [approval] = await db.select().from(approvals).where(eq(approvals.id, id));
+    return approval || undefined;
+  }
+
+  async getApprovalsByCompanyId(companyId: string): Promise<Approval[]> {
+    return await db.select().from(approvals).where(eq(approvals.companyId, companyId)).orderBy(desc(approvals.createdAt));
+  }
+
+  async getApprovalsByApproverId(approverId: string): Promise<Approval[]> {
+    return await db.select().from(approvals).where(eq(approvals.approverId, approverId)).orderBy(desc(approvals.createdAt));
+  }
+
+  async getPendingApprovals(approverId: string): Promise<Approval[]> {
+    return await db.select().from(approvals).where(and(eq(approvals.approverId, approverId), eq(approvals.status, "pending"))).orderBy(desc(approvals.createdAt));
+  }
+
+  async createApproval(insertApproval: InsertApproval): Promise<Approval> {
+    const [approval] = await db.insert(approvals).values(insertApproval as any).returning();
+    return approval;
+  }
+
+  async updateApproval(id: string, data: Partial<Approval>): Promise<Approval | undefined> {
+    const [approval] = await db.update(approvals).set(data as any).where(eq(approvals.id, id)).returning();
+    return approval || undefined;
   }
 }
 
