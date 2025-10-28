@@ -1917,6 +1917,121 @@ export const employeeSyncLogsRelations = relations(employeeSyncLogs, ({ one }) =
 
 export const insertEmployeeSyncLogSchema = createInsertSchema(employeeSyncLogs).omit({ id: true, createdAt: true });
 
+// ===== PHASE 1: MARKETPLACE FEATURES =====
+
+// Service Packages - Fiverr-style tiered service offerings (Basic/Standard/Premium)
+export const servicePackages = pgTable("service_packages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  providerId: uuid("provider_id").references(() => providers.id).notNull(),
+  category: text("category").notNull().$type<"transport" | "tour" | "service" | "venue" | "other">(),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  photoUrls: text("photo_urls").array().default([]),
+  
+  // Basic tier
+  basicTitle: text("basic_title").notNull(),
+  basicDescription: text("basic_description").notNull(),
+  basicPriceMad: integer("basic_price_mad").notNull(),
+  basicDeliveryDays: integer("basic_delivery_days").notNull(),
+  basicFeatures: jsonb("basic_features").default([]).notNull(),
+  
+  // Standard tier
+  standardTitle: text("standard_title"),
+  standardDescription: text("standard_description"),
+  standardPriceMad: integer("standard_price_mad"),
+  standardDeliveryDays: integer("standard_delivery_days"),
+  standardFeatures: jsonb("standard_features").default([]).notNull(),
+  
+  // Premium tier
+  premiumTitle: text("premium_title"),
+  premiumDescription: text("premium_description"),
+  premiumPriceMad: integer("premium_price_mad"),
+  premiumDeliveryDays: integer("premium_delivery_days"),
+  premiumFeatures: jsonb("premium_features").default([]).notNull(),
+  
+  // Extras/Add-ons
+  extras: jsonb("extras").default([]).notNull(), // [{title, priceMad, description}]
+  
+  // Metadata
+  active: boolean("active").default(true).notNull(),
+  views: integer("views").default(0).notNull(),
+  orders: integer("orders").default(0).notNull(),
+  rating: decimal("rating", { precision: 3, scale: 2 }).default("0").notNull(),
+  reviewCount: integer("review_count").default(0).notNull(),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const servicePackagesRelations = relations(servicePackages, ({ one, many }) => ({
+  provider: one(providers, {
+    fields: [servicePackages.providerId],
+    references: [providers.id],
+  }),
+  favorites: many(favorites),
+}));
+
+export const insertServicePackageSchema = createInsertSchema(servicePackages).omit({ id: true, createdAt: true, updatedAt: true });
+
+// Favorites/Wishlists - Users can save providers, packages, venues, etc.
+export const favorites = pgTable("favorites", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").references(() => users.id).notNull(),
+  itemType: text("item_type").notNull().$type<"provider" | "service_package" | "venue" | "bleisure_package" | "coworking_space">(),
+  itemId: uuid("item_id").notNull(), // Reference to the actual item
+  notes: text("notes"), // Optional user notes
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const favoritesRelations = relations(favorites, ({ one }) => ({
+  user: one(users, {
+    fields: [favorites.userId],
+    references: [users.id],
+  }),
+}));
+
+export const insertFavoriteSchema = createInsertSchema(favorites).omit({ id: true, createdAt: true });
+
+// Package Orders - Track orders of service packages (extends job system)
+export const packageOrders = pgTable("package_orders", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  jobId: uuid("job_id").references(() => jobs.id).notNull(), // Links to existing job
+  packageId: uuid("package_id").references(() => servicePackages.id).notNull(),
+  tier: text("tier").notNull().$type<"basic" | "standard" | "premium">(),
+  selectedExtras: jsonb("selected_extras").default([]).notNull(), // Array of extra IDs selected
+  totalPriceMad: integer("total_price_mad").notNull(),
+  deliveryDate: timestamp("delivery_date"),
+  status: text("status").default("pending").notNull().$type<"pending" | "in_progress" | "delivered" | "revision" | "completed" | "cancelled">(),
+  revisions: integer("revisions").default(0).notNull(),
+  maxRevisions: integer("max_revisions").default(0).notNull(),
+  requirements: text("requirements"), // Buyer requirements/instructions
+  deliverables: jsonb("deliverables").default([]).notNull(), // URLs or descriptions of delivered items
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const packageOrdersRelations = relations(packageOrders, ({ one }) => ({
+  job: one(jobs, {
+    fields: [packageOrders.jobId],
+    references: [jobs.id],
+  }),
+  package: one(servicePackages, {
+    fields: [packageOrders.packageId],
+    references: [servicePackages.id],
+  }),
+}));
+
+export const insertPackageOrderSchema = createInsertSchema(packageOrders).omit({ id: true, createdAt: true, updatedAt: true });
+
+export type ServicePackage = typeof servicePackages.$inferSelect;
+export type InsertServicePackage = z.infer<typeof insertServicePackageSchema>;
+
+export type Favorite = typeof favorites.$inferSelect;
+export type InsertFavorite = z.infer<typeof insertFavoriteSchema>;
+
+export type PackageOrder = typeof packageOrders.$inferSelect;
+export type InsertPackageOrder = z.infer<typeof insertPackageOrderSchema>;
+
 export type BleisurePackage = typeof bleisurePackages.$inferSelect;
 export type InsertBleisurePackage = z.infer<typeof insertBleisurePackageSchema>;
 
