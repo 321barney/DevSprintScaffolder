@@ -13,6 +13,7 @@ import PostJob from "@/pages/PostJob";
 import ProviderSignup from "@/pages/ProviderSignup";
 import ProviderDetail from "@/pages/ProviderDetail";
 import Messages from "@/pages/Messages";
+import MeetingsEvents from "@/pages/MeetingsEvents";
 import Login from "@/pages/Login";
 import Signup from "@/pages/Signup";
 import NotFound from "@/pages/not-found";
@@ -35,6 +36,7 @@ function Router() {
           <Route path="/provider/signup" component={ProviderSignup} />
           <Route path="/provider/:id" component={ProviderDetail} />
           <Route path="/messages/:jobId?" component={Messages} />
+          <Route path="/mice" component={MeetingsEvents} />
           <Route component={NotFound} />
         </Switch>
       </div>

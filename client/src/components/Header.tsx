@@ -7,7 +7,7 @@ import { useLocation } from 'wouter';
 import { useMutation } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Briefcase, LogOut, LogIn, UserPlus } from 'lucide-react';
+import { Plus, Briefcase, LogOut, LogIn, UserPlus, Building2 } from 'lucide-react';
 
 export function Header() {
   const { locale, currentUser, setCurrentUser } = useApp();
@@ -58,6 +58,14 @@ export function Header() {
             data-testid="nav-browse"
           >
             {t('nav.browse')}
+          </Button>
+          <Button
+            variant={location.startsWith('/mice') ? 'secondary' : 'ghost'}
+            onClick={() => setLocation('/mice')}
+            data-testid="nav-mice"
+          >
+            <Building2 className="w-4 h-4 mr-2" />
+            {t('nav.mice')}
           </Button>
           {currentUser && (
             <Button
