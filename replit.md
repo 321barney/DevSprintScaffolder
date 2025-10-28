@@ -5,7 +5,7 @@
 ## Overview
 Trip to Work is a Morocco-focused tourism and service platform where tourists and buyers can discover and book services from verified providers (transport, tours, handymen, guides). Providers build their brand with public profiles, photo portfolios, and verified credentials. The platform features maps integration, GPS tracking, AI-assisted pricing, photo uploads, and multi-language support (FR/AR/EN with RTL).
 
-## Current Status: Phase 1 Monetization Complete ✅
+## Current Status: Phase 2 Infrastructure Complete ✅ (Trip to Work Pivot)
 
 ### Core MVP Features (Pre-Phase 1)
 - ✅ Multi-step job posting flow (category → description → location/budget)
@@ -26,18 +26,27 @@ Trip to Work is a Morocco-focused tourism and service platform where tourists an
 - ✅ **Payment Gateway Integration**: CMI/PayZone/MTC support with test mode
 - ✅ **Financial Tables**: platform_fees, provider_subscriptions, transactions, provider_earnings
 
+### Phase 2 Features Added ✅
+- ✅ **Rebranding**: Changed "SoukMatch" → "Trip to Work" throughout app
+- ✅ **Database Schema**: Added 5 new tables (provider_profiles, vehicles, provider_documents, trips, trip_tracks)
+- ✅ **Object Storage**: Integrated Replit App Storage for photo uploads and document storage
+- ✅ **Storage Layer**: Extended storage interface with 15+ new methods for Phase 2 tables
+- ✅ **Subscription Tier Renaming**: Free→Starter, Basic→Professional, Pro→Fleet
+
 ### Test Results
 - **Core MVP Test:** ✅ PASSED (Job posting, navigation, UI interactions)
 - **Phase 1 Integration Test:** ✅ PASSED
   - AI pricing generates price bands with aiGenerated flag
   - Free tier limits enforced (2→1→0 offers tracked correctly)
-  - Commission calculation accurate (10% for Pro tier: 500 MAD → 50 MAD fee)
+  - Commission calculation accurate (10% for Fleet tier: 500 MAD → 50 MAD fee)
   - Free tier exhaustion blocks new offers with 403 + needsUpgrade flag
   - Subscription status API returns correct tier/eligibility data
 
 ## Architecture
 
 ### Database Schema (PostgreSQL + Drizzle ORM)
+
+**Core Tables:**
 - **users**: id (uuid), email, password, role (buyer/provider/admin), locale
 - **providers**: id (uuid), userId, displayName, city, rating, permits (jsonb), verified
 - **jobs**: id (uuid), buyerId, category, city, spec (jsonb), budgetHintMad, status
@@ -45,6 +54,19 @@ Trip to Work is a Morocco-focused tourism and service platform where tourists an
 - **messages**: id (uuid), jobId, senderId, body, createdAt
 - **ratings**: id (uuid), jobId, raterId, rateeId, score, comment
 - **financing_offers**: id (uuid), jobId, lenderId, apr, termMonths, monthlyPaymentMad
+
+**Phase 1 Monetization Tables:**
+- **platform_fees**: id, offerId, jobId, providerId, grossAmountMad, commissionRate, commissionAmountMad, providerNetMad
+- **provider_subscriptions**: id, providerId, tier (starter/professional/fleet), freeOffersRemaining, paidOffersSubmitted
+- **transactions**: id, providerId, type, amountMad, status, pspProvider, pspTransactionId
+- **provider_earnings**: id, providerId, offerId, jobId, grossAmountMad, commissionAmountMad, netAmountMad
+
+**Phase 2 Trip to Work Tables:**
+- **provider_profiles**: id, providerId, brandName, bio, profilePhotoUrl, heroImageUrl, portfolioPhotos[], latitude, longitude, serviceAreaRadius
+- **vehicles**: id, providerId, make, model, year, licensePlate, type, capacity, photoUrls[]
+- **provider_documents**: id, providerId, type (drivers_license, vehicle_registration, insurance, transport_permit, trade_license), documentUrl, status (pending/verified/rejected)
+- **trips**: id, jobId, offerId, providerId, buyerId, startedAt, completedAt, duration, distance, startLocation, endLocation, status
+- **trip_tracks**: id, tripId, latitude, longitude, accuracy, speed, heading, timestamp
 
 ### API Endpoints
 
@@ -228,8 +250,13 @@ npx tsx server/seed.ts # Seed test data
 - **Database:** PostgreSQL via DATABASE_URL env var
 
 ## Recent Changes
+- **2025-10-28 (Phase 2):** ✅ Rebranded from "SoukMatch" to "Trip to Work" - multi-service tourism platform
+- **2025-10-28 (Phase 2):** Created 5 new database tables for provider profiles, vehicles, documents, trips, GPS tracking
+- **2025-10-28 (Phase 2):** Integrated Replit Object Storage for photo/document uploads
+- **2025-10-28 (Phase 2):** Extended storage layer with 15+ new CRUD methods
+- **2025-10-28 (Phase 2):** Renamed subscription tiers: Starter/Professional/Fleet
 - **2025-10-28 (Phase 1):** ✅ Completed Phase 1 monetization integration - all tests passing
-- **2025-10-28 (Phase 1):** Fixed subscription seed data (Pro/Basic tiers now correctly assigned)
+- **2025-10-28 (Phase 1):** Fixed subscription seed data (Fleet/Professional tiers now correctly assigned)
 - **2025-10-28 (Phase 1):** Created commission service with tier-based rate calculation
 - **2025-10-28 (Phase 1):** Integrated Anthropic Claude API for dynamic pricing with fallback
 - **2025-10-28 (Phase 1):** Added payment gateway service (CMI/PayZone/MTC in test mode)

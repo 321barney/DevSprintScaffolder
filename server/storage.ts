@@ -2,6 +2,7 @@
 import {
   users, providers, jobs, offers, financingOffers, messages, ratings,
   platformFees, providerSubscriptions, transactions, providerEarnings,
+  providerProfiles, vehicles, providerDocuments, trips, tripTracks,
   type User, type InsertUser,
   type Provider, type InsertProvider,
   type Job, type InsertJob,
@@ -13,6 +14,11 @@ import {
   type ProviderSubscription, type InsertProviderSubscription,
   type Transaction, type InsertTransaction,
   type ProviderEarning, type InsertProviderEarning,
+  type ProviderProfile, type InsertProviderProfile,
+  type Vehicle, type InsertVehicle,
+  type ProviderDocument, type InsertProviderDocument,
+  type Trip, type InsertTrip,
+  type TripTrack, type InsertTripTrack,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc } from "drizzle-orm";
@@ -75,6 +81,34 @@ export interface IStorage {
   // Phase 1: Provider Earnings
   createProviderEarning(earning: InsertProviderEarning): Promise<ProviderEarning>;
   getProviderEarningsByProviderId(providerId: string): Promise<ProviderEarning[]>;
+
+  // Phase 2: Provider Profiles
+  getProviderProfile(providerId: string): Promise<ProviderProfile | undefined>;
+  createProviderProfile(profile: InsertProviderProfile): Promise<ProviderProfile>;
+  updateProviderProfile(providerId: string, data: Partial<ProviderProfile>): Promise<ProviderProfile | undefined>;
+
+  // Phase 2: Vehicles
+  getVehicle(id: string): Promise<Vehicle | undefined>;
+  getVehiclesByProviderId(providerId: string): Promise<Vehicle[]>;
+  createVehicle(vehicle: InsertVehicle): Promise<Vehicle>;
+  updateVehicle(id: string, data: Partial<Vehicle>): Promise<Vehicle | undefined>;
+
+  // Phase 2: Provider Documents
+  getProviderDocument(id: string): Promise<ProviderDocument | undefined>;
+  getProviderDocumentsByProviderId(providerId: string): Promise<ProviderDocument[]>;
+  createProviderDocument(doc: InsertProviderDocument): Promise<ProviderDocument>;
+  updateProviderDocument(id: string, data: Partial<ProviderDocument>): Promise<ProviderDocument | undefined>;
+
+  // Phase 2: Trips
+  getTrip(id: string): Promise<Trip | undefined>;
+  getTripsByProviderId(providerId: string): Promise<Trip[]>;
+  getTripsByBuyerId(buyerId: string): Promise<Trip[]>;
+  createTrip(trip: InsertTrip): Promise<Trip>;
+  updateTrip(id: string, data: Partial<Trip>): Promise<Trip | undefined>;
+
+  // Phase 2: Trip Tracks
+  getTripTracksByTripId(tripId: string): Promise<TripTrack[]>;
+  createTripTrack(track: InsertTripTrack): Promise<TripTrack>;
 }
 
 // Database storage implementation
@@ -359,6 +393,159 @@ export class DatabaseStorage implements IStorage {
       .from(providerEarnings)
       .where(eq(providerEarnings.providerId, providerId))
       .orderBy(desc(providerEarnings.createdAt));
+  }
+
+  // Phase 2: Provider Profiles
+  async getProviderProfile(providerId: string): Promise<ProviderProfile | undefined> {
+    const [profile] = await db
+      .select()
+      .from(providerProfiles)
+      .where(eq(providerProfiles.providerId, providerId));
+    return profile || undefined;
+  }
+
+  async createProviderProfile(insertProfile: InsertProviderProfile): Promise<ProviderProfile> {
+    const [profile] = await db
+      .insert(providerProfiles)
+      .values(insertProfile as any)
+      .returning();
+    return profile;
+  }
+
+  async updateProviderProfile(providerId: string, data: Partial<ProviderProfile>): Promise<ProviderProfile | undefined> {
+    const [profile] = await db
+      .update(providerProfiles)
+      .set(data as any)
+      .where(eq(providerProfiles.providerId, providerId))
+      .returning();
+    return profile || undefined;
+  }
+
+  // Phase 2: Vehicles
+  async getVehicle(id: string): Promise<Vehicle | undefined> {
+    const [vehicle] = await db
+      .select()
+      .from(vehicles)
+      .where(eq(vehicles.id, id));
+    return vehicle || undefined;
+  }
+
+  async getVehiclesByProviderId(providerId: string): Promise<Vehicle[]> {
+    return await db
+      .select()
+      .from(vehicles)
+      .where(eq(vehicles.providerId, providerId))
+      .orderBy(desc(vehicles.createdAt));
+  }
+
+  async createVehicle(insertVehicle: InsertVehicle): Promise<Vehicle> {
+    const [vehicle] = await db
+      .insert(vehicles)
+      .values(insertVehicle as any)
+      .returning();
+    return vehicle;
+  }
+
+  async updateVehicle(id: string, data: Partial<Vehicle>): Promise<Vehicle | undefined> {
+    const [vehicle] = await db
+      .update(vehicles)
+      .set(data as any)
+      .where(eq(vehicles.id, id))
+      .returning();
+    return vehicle || undefined;
+  }
+
+  // Phase 2: Provider Documents
+  async getProviderDocument(id: string): Promise<ProviderDocument | undefined> {
+    const [doc] = await db
+      .select()
+      .from(providerDocuments)
+      .where(eq(providerDocuments.id, id));
+    return doc || undefined;
+  }
+
+  async getProviderDocumentsByProviderId(providerId: string): Promise<ProviderDocument[]> {
+    return await db
+      .select()
+      .from(providerDocuments)
+      .where(eq(providerDocuments.providerId, providerId))
+      .orderBy(desc(providerDocuments.createdAt));
+  }
+
+  async createProviderDocument(insertDoc: InsertProviderDocument): Promise<ProviderDocument> {
+    const [doc] = await db
+      .insert(providerDocuments)
+      .values(insertDoc as any)
+      .returning();
+    return doc;
+  }
+
+  async updateProviderDocument(id: string, data: Partial<ProviderDocument>): Promise<ProviderDocument | undefined> {
+    const [doc] = await db
+      .update(providerDocuments)
+      .set(data as any)
+      .where(eq(providerDocuments.id, id))
+      .returning();
+    return doc || undefined;
+  }
+
+  // Phase 2: Trips
+  async getTrip(id: string): Promise<Trip | undefined> {
+    const [trip] = await db
+      .select()
+      .from(trips)
+      .where(eq(trips.id, id));
+    return trip || undefined;
+  }
+
+  async getTripsByProviderId(providerId: string): Promise<Trip[]> {
+    return await db
+      .select()
+      .from(trips)
+      .where(eq(trips.providerId, providerId))
+      .orderBy(desc(trips.createdAt));
+  }
+
+  async getTripsByBuyerId(buyerId: string): Promise<Trip[]> {
+    return await db
+      .select()
+      .from(trips)
+      .where(eq(trips.buyerId, buyerId))
+      .orderBy(desc(trips.createdAt));
+  }
+
+  async createTrip(insertTrip: InsertTrip): Promise<Trip> {
+    const [trip] = await db
+      .insert(trips)
+      .values(insertTrip as any)
+      .returning();
+    return trip;
+  }
+
+  async updateTrip(id: string, data: Partial<Trip>): Promise<Trip | undefined> {
+    const [trip] = await db
+      .update(trips)
+      .set(data as any)
+      .where(eq(trips.id, id))
+      .returning();
+    return trip || undefined;
+  }
+
+  // Phase 2: Trip Tracks
+  async getTripTracksByTripId(tripId: string): Promise<TripTrack[]> {
+    return await db
+      .select()
+      .from(tripTracks)
+      .where(eq(tripTracks.tripId, tripId))
+      .orderBy(desc(tripTracks.timestamp));
+  }
+
+  async createTripTrack(insertTrack: InsertTripTrack): Promise<TripTrack> {
+    const [track] = await db
+      .insert(tripTracks)
+      .values(insertTrack as any)
+      .returning();
+    return track;
   }
 }
 
