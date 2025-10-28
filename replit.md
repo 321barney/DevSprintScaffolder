@@ -35,6 +35,12 @@ No specific user preferences were provided in the original document.
   - **Corporate Workspace**: Company accounts, cost centers, traveler profiles, approval workflows.
   - **Enterprise Features**: VAT-compliant invoicing, PO numbers, payment terms (Net-15/30), SLA response times.
   - **Group Bookings**: Room blocks, rooming lists, deposit schedules.
+  - **Preferred Partner Tiers**: Four-tier system (Bronze, Silver, Gold, Platinum) with reliability scoring, margin settings, and benefits management for providers across five categories (transport, hotel, venue, av_equipment, dmc).
+  - **Corporate Rate Negotiation**: Account-based pricing with percentage discounts, fixed rates, and tiered structures. Tracks usage counts and spending limits per company-provider relationship.
+  - **Milestone Payment Tracking**: Multi-stage payment schedules (deposit, pre-event, post-event, final) with support for multiple payers (company, individual, cost center) and various payment methods (bank transfer, credit card, invoice).
+  - **Event Reporting Dashboard**: Comprehensive analytics tracking total spend, savings, RFP conversion rates, booking counts, on-time delivery percentages, and custom metrics per company per period.
+  - **Duty of Care & Travel Safety**: Itinerary management with traveler profiles, emergency contacts, risk assessments, and real-time disruption alerts (weather, flight delays, health, security) with severity levels and acknowledgment tracking.
+  - **DMC Network**: Destination Management Company integration with service catalogs, destination coverage, group size limits, language offerings, certifications, insurance details, and verification status.
 
 ### System Design Choices
 - **Database**: PostgreSQL with Drizzle ORM.
@@ -42,6 +48,7 @@ No specific user preferences were provided in the original document.
     - **Monetization Tables**: `platform_fees`, `provider_subscriptions`, `transactions`, `provider_earnings`.
     - **Trip to Work Tables**: `provider_profiles`, `vehicles`, `provider_documents`, `trips`, `trip_tracks`.
     - **MICE/B2B Tables**: `companies`, `cost_centers`, `traveler_profiles`, `venues`, `venue_rooms`, `rfps`, `quotes`, `group_bookings`, `approvals`.
+    - **Advanced MICE Tables**: `partner_tiers`, `corporate_rates`, `milestone_payments`, `event_reports`, `itineraries`, `disruption_alerts`, `dmc_partners`.
 - **API Endpoints**:
     - **Authentication**: `POST /api/auth/signup`, `POST /api/auth/login`.
     - **Jobs**: `POST /api/jobs`, `GET /api/jobs`, `GET /api/jobs/:id`, `POST /api/jobs/:id/cancel`.
@@ -52,6 +59,12 @@ No specific user preferences were provided in the original document.
     - **MICE - Venues**: `GET /api/venues`, `POST /api/venues`, `GET /api/venues/:id`, `PATCH /api/venues/:id`, `POST /api/venues/:venueId/rooms`, `GET /api/venues/:venueId/rooms`.
     - **MICE - RFPs**: `GET /api/rfps`, `POST /api/rfps`, `GET /api/rfps/:id`, `PATCH /api/rfps/:id`, `GET /api/rfps/:id/quotes`, `POST /api/rfps/:id/quotes`.
     - **MICE - Corporate**: `POST /api/companies`, `GET /api/companies/:id`, `GET /api/companies/:id/cost-centers`, `POST /api/cost-centers`, `GET /api/companies/:id/travelers`, `POST /api/traveler-profiles`, `GET /api/approvals/pending`, `POST /api/approvals`, `PATCH /api/approvals/:id`, `GET /api/companies/:id/bookings`, `POST /api/group-bookings`.
+    - **Advanced MICE - Partner Management**: `GET /api/partner-tiers`, `POST /api/partner-tiers`, `GET /api/partner-tiers/:id`, `PATCH /api/partner-tiers/:id`.
+    - **Advanced MICE - Corporate Rates**: `GET /api/corporate-rates`, `POST /api/corporate-rates`, `GET /api/corporate-rates/:id`, `PATCH /api/corporate-rates/:id`.
+    - **Advanced MICE - Payments**: `GET /api/milestone-payments`, `POST /api/milestone-payments`, `GET /api/milestone-payments/:id`, `PATCH /api/milestone-payments/:id`.
+    - **Advanced MICE - Reporting**: `GET /api/event-reports`, `POST /api/event-reports`, `GET /api/event-reports/:id`.
+    - **Advanced MICE - Duty of Care**: `GET /api/itineraries`, `POST /api/itineraries`, `GET /api/itineraries/:id`, `PATCH /api/itineraries/:id`, `GET /api/disruption-alerts`, `POST /api/disruption-alerts`, `GET /api/disruption-alerts/:id`, `PATCH /api/disruption-alerts/:id`.
+    - **Advanced MICE - DMC Partners**: `GET /api/dmc-partners`, `POST /api/dmc-partners`, `GET /api/dmc-partners/:id`, `PATCH /api/dmc-partners/:id`.
 - **AI Modules**:
     - **Pricing Band**: `server/ai/pricing.ts` calculates price ranges based on city, category, distance, passengers, and time.
     - **Offer Scoring**: `server/ai/scoring.ts` scores offers based on provider rating, price fairness, ETA, compliance, and job fit.
