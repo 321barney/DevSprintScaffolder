@@ -5,9 +5,9 @@
 ## Overview
 SoukMatch is a Morocco-first marketplace web application where buyers post jobs (transport, tours, services, car financing) and service providers submit competitive bids. The platform features AI-assisted pricing, offer scoring, provider KYC verification, multi-language support (FR/AR/EN with RTL), messaging, and ratings functionality.
 
-## Current Status: MVP Complete ✅
+## Current Status: Phase 1 Monetization Complete ✅
 
-### Implemented Features
+### Core MVP Features (Pre-Phase 1)
 - ✅ Multi-step job posting flow (category → description → location/budget)
 - ✅ AI pricing bands and offer scoring (Morocco-specific heuristics)
 - ✅ Job listings with real-time offer counts
@@ -17,15 +17,23 @@ SoukMatch is a Morocco-first marketplace web application where buyers post jobs 
 - ✅ Dark mode throughout
 - ✅ Responsive design for mobile/tablet/desktop
 - ✅ PostgreSQL database with complete schema
-- ✅ Comprehensive API endpoints
+
+### Phase 1 Monetization Features ✅
+- ✅ **Commission System**: 10-15% based on category/tier, atomic recording of platform fees and provider earnings
+- ✅ **Subscription Tiers**: Free (4 offers) → Basic (299 MAD/month, 50 offers, 12% commission) → Pro (799 MAD/month, unlimited, 10% commission)
+- ✅ **AI-Powered Dynamic Pricing**: Anthropic Claude integration with automatic fallback to Morocco-specific heuristics
+- ✅ **Free Tier Management**: Automatic tracking and enforcement of offer limits
+- ✅ **Payment Gateway Integration**: CMI/PayZone/MTC support with test mode
+- ✅ **Financial Tables**: platform_fees, provider_subscriptions, transactions, provider_earnings
 
 ### Test Results
-- **End-to-End Test:** ✅ PASSED
-  - Job posting flow works correctly
-  - Job creation persists to database
-  - Redirect to job detail page functional
-  - Navigation between all pages working
-  - Toast notifications displaying properly
+- **Core MVP Test:** ✅ PASSED (Job posting, navigation, UI interactions)
+- **Phase 1 Integration Test:** ✅ PASSED
+  - AI pricing generates price bands with aiGenerated flag
+  - Free tier limits enforced (2→1→0 offers tracked correctly)
+  - Commission calculation accurate (10% for Pro tier: 500 MAD → 50 MAD fee)
+  - Free tier exhaustion blocks new offers with 403 + needsUpgrade flag
+  - Subscription status API returns correct tier/eligibility data
 
 ## Architecture
 
@@ -220,6 +228,12 @@ npx tsx server/seed.ts # Seed test data
 - **Database:** PostgreSQL via DATABASE_URL env var
 
 ## Recent Changes
+- **2025-10-28 (Phase 1):** ✅ Completed Phase 1 monetization integration - all tests passing
+- **2025-10-28 (Phase 1):** Fixed subscription seed data (Pro/Basic tiers now correctly assigned)
+- **2025-10-28 (Phase 1):** Created commission service with tier-based rate calculation
+- **2025-10-28 (Phase 1):** Integrated Anthropic Claude API for dynamic pricing with fallback
+- **2025-10-28 (Phase 1):** Added payment gateway service (CMI/PayZone/MTC in test mode)
+- **2025-10-28 (Phase 1):** Extended database schema with 4 financial tables
 - **2025-10-28:** Fixed job creation redirect bug (JSON parsing)
 - **2025-10-28:** Fixed UUID validation errors (replaced 'demo-buyer' string)
 - **2025-10-28:** Added end-to-end test coverage - all tests passing
