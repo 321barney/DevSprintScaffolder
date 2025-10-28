@@ -52,6 +52,8 @@ export const jobs = pgTable("jobs", {
   buyerId: uuid("buyer_id").references(() => users.id).notNull(),
   category: text("category").notNull().$type<"transport" | "tour" | "service" | "financing">(),
   city: text("city"),
+  latitude: decimal("latitude", { precision: 10, scale: 7 }),
+  longitude: decimal("longitude", { precision: 10, scale: 7 }),
   spec: jsonb("spec").notNull(),
   budgetHintMad: integer("budget_hint_mad"),
   status: text("status").default("open").notNull().$type<"open" | "accepted" | "completed" | "cancelled">(),

@@ -3,6 +3,8 @@ import type { Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import bcrypt from "bcrypt";
 import { storage } from "./storage";
+import { db } from "./db";
+import { providers } from "@shared/schema";
 import { generateDynamicPriceBand, scoreOffer as scoreOfferWithAI } from "./services/ai-pricing";
 import { canProviderSubmitOffer, consumeFreeOffer, incrementPaidOfferCounter, processOfferAcceptance, getOrCreateSubscription } from "./services/commission";
 import { logAudit, AUDIT_ACTIONS } from "./audit";
@@ -184,12 +186,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(provider);
   }));
 
+  app.get("/api/providers", asyncHandler(async (req, res) => {
+    // Get all providers from database
+    const providersList = await db.select().from(providers);
+    
+    // Enrich with profile data
+    const providersWithProfiles = await Promise.all(
+      providersList.map(async (provider) => {
+        const profile = await storage.getProviderProfile(provider.id);
+        return {
+          ...provider,
+          profile: profile || null,
+        };
+      })
+    );
+
+    res.json(providersWithProfiles);
+  }));
+
   app.get("/api/providers/:id", asyncHandler(async (req, res) => {
     const provider = await storage.getProvider(req.params.id);
     if (!provider) {
       return res.status(404).json({ error: "Provider not found" });
     }
-    res.json(provider);
+    
+    // Include profile data
+    const profile = await storage.getProviderProfile(provider.id);
+    res.json({
+      ...provider,
+      profile: profile || null,
+    });
   }));
 
   // ===== JOB ROUTES =====

@@ -40,6 +40,19 @@ export async function seedDatabase() {
     });
 
     await storage.updateProvider(provider1.id, { rating: '4.8', verified: true });
+    
+    // Create profile for provider1 with location
+    await storage.createProviderProfile({
+      providerId: provider1.id,
+      brandName: 'Transport Express Casa',
+      bio: 'Service de transport professionnel entre les villes marocaines. Véhicules modernes et climatisés.',
+      latitude: '33.5731',
+      longitude: '-7.5898',
+      serviceAreaRadius: 50000, // 50km
+      profilePhotoUrl: null,
+      heroImageUrl: null,
+      portfolioPhotos: [],
+    });
 
     const provider2User = await storage.createUser({
       email: 'tours@marrakech.ma',
@@ -56,6 +69,19 @@ export async function seedDatabase() {
     });
 
     await storage.updateProvider(provider2.id, { rating: '4.9', verified: true });
+    
+    // Create profile for provider2 with location
+    await storage.createProviderProfile({
+      providerId: provider2.id,
+      brandName: 'Atlas Mountains Tours',
+      bio: 'Visites guidées authentiques dans les montagnes de l\'Atlas et la médina de Marrakech.',
+      latitude: '31.6295',
+      longitude: '-7.9811',
+      serviceAreaRadius: 30000, // 30km
+      profilePhotoUrl: null,
+      heroImageUrl: null,
+      portfolioPhotos: [],
+    });
 
     const provider3User = await storage.createUser({
       email: 'service@rabat.ma',
@@ -72,12 +98,27 @@ export async function seedDatabase() {
     });
 
     await storage.updateProvider(provider3.id, { rating: '4.5', verified: false });
+    
+    // Create profile for provider3 with location
+    await storage.createProviderProfile({
+      providerId: provider3.id,
+      brandName: 'Services Pro Rabat',
+      bio: 'Installation et réparation de climatisation, plomberie et électricité.',
+      latitude: '34.0209',
+      longitude: '-6.8416',
+      serviceAreaRadius: 20000, // 20km
+      profilePhotoUrl: null,
+      heroImageUrl: null,
+      portfolioPhotos: [],
+    });
 
     // Create sample jobs
     const job1 = await storage.createJob({
       buyerId: buyer1.id,
       category: 'transport',
       city: 'Casablanca',
+      latitude: '33.5731',
+      longitude: '-7.5898',
       spec: {
         description: 'Transport de Casablanca à Marrakech pour 4 personnes',
         pickup: 'Casablanca',
@@ -93,6 +134,8 @@ export async function seedDatabase() {
       buyerId: buyer1.id,
       category: 'tour',
       city: 'Marrakech',
+      latitude: '31.6295',
+      longitude: '-7.9811',
       spec: {
         description: 'Visite guidée de la médina de Marrakech',
         pax: 2,
@@ -105,6 +148,8 @@ export async function seedDatabase() {
       buyerId: buyer2.id,
       category: 'service',
       city: 'Rabat',
+      latitude: '34.0209',
+      longitude: '-6.8416',
       spec: {
         description: 'Installation de climatisation',
         priceBand: { low: 600, high: 900, currency: 'MAD' },
