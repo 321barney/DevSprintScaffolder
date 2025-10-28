@@ -417,24 +417,227 @@ export const COMMISSION_CONFIG = {
 
 export const SUBSCRIPTION_TIERS = {
   free: {
-    name: "Free",
+    name: "Starter",  // Renamed from "Free"
     priceMAD: 0,
     offersIncluded: 4,
     commissionRate: null, // Uses category default
     maxOffers: 4,
   },
   basic: {
-    name: "Basic",
+    name: "Professional",  // Renamed from "Basic"
     priceMAD: 299,
     offersIncluded: 50,
     commissionRate: 0.12, // 12%
     maxOffers: 50,
   },
   pro: {
-    name: "Pro",
+    name: "Fleet",  // Renamed from "Pro"
     priceMAD: 799,
     offersIncluded: null, // Unlimited
     commissionRate: 0.10, // 10%
     maxOffers: null,
   },
 } as const;
+
+// ========================================
+// PHASE 2: Trip to Work Features
+// ========================================
+
+// Provider Profiles - Extended branding and portfolio
+export const providerProfiles = pgTable("provider_profiles", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  providerId: uuid("provider_id").references(() => providers.id).unique().notNull(),
+  brandName: text("brand_name"),
+  bio: text("bio"),
+  profilePhotoUrl: text("profile_photo_url"),
+  heroImageUrl: text("hero_image_url"),
+  portfolioPhotos: text("portfolio_photos").array().default([]),
+  latitude: decimal("latitude", { precision: 10, scale: 8 }),
+  longitude: decimal("longitude", { precision: 11, scale: 8 }),
+  serviceAreaRadius: integer("service_area_radius"), // in kilometers
+  website: text("website"),
+  socialMedia: jsonb("social_media"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const providerProfilesRelations = relations(providerProfiles, ({ one }) => ({
+  provider: one(providers, {
+    fields: [providerProfiles.providerId],
+    references: [providers.id],
+  }),
+}));
+
+// Vehicles - Provider vehicle information
+export const vehicles = pgTable("vehicles", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  providerId: uuid("provider_id").references(() => providers.id).notNull(),
+  make: text("make").notNull(),
+  model: text("model").notNull(),
+  year: integer("year"),
+  licensePlate: text("license_plate").notNull(),
+  type: text("type").notNull().$type<"sedan" | "suv" | "van" | "bus" | "truck" | "motorcycle" | "other">(),
+  capacity: integer("capacity"), // passenger capacity
+  photoUrls: text("photo_urls").array().default([]),
+  status: text("status").default("active").notNull().$type<"active" | "inactive" | "maintenance">(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const vehiclesRelations = relations(vehicles, ({ one }) => ({
+  provider: one(providers, {
+    fields: [vehicles.providerId],
+    references: [providers.id],
+  }),
+}));
+
+// Provider Documents - Licensing and verification documents
+export const providerDocuments = pgTable("provider_documents", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  providerId: uuid("provider_id").references(() => providers.id).notNull(),
+  type: text("type").notNull().$type<"drivers_license" | "vehicle_registration" | "insurance" | "transport_permit" | "trade_license" | "certification" | "other">(),
+  documentUrl: text("document_url").notNull(),
+  documentNumber: text("document_number"),
+  expiresAt: timestamp("expires_at"),
+  status: text("status").default("pending").notNull().$type<"pending" | "verified" | "rejected" | "expired">(),
+  verifiedBy: uuid("verified_by").references(() => users.id),
+  verifiedAt: timestamp("verified_at"),
+  rejectionReason: text("rejection_reason"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const providerDocumentsRelations = relations(providerDocuments, ({ one }) => ({
+  provider: one(providers, {
+    fields: [providerDocuments.providerId],
+    references: [providers.id],
+  }),
+  verifier: one(users, {
+    fields: [providerDocuments.verifiedBy],
+    references: [users.id],
+  }),
+}));
+
+// Trips - Completed service records with GPS tracking
+export const trips = pgTable("trips", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  jobId: uuid("job_id").references(() => jobs.id).notNull(),
+  offerId: uuid("offer_id").references(() => offers.id).notNull(),
+  providerId: uuid("provider_id").references(() => providers.id).notNull(),
+  buyerId: uuid("buyer_id").references(() => users.id).notNull(),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  duration: integer("duration"), // in minutes
+  distance: integer("distance"), // in meters
+  startLocation: jsonb("start_location"), // {lat, lng, address}
+  endLocation: jsonb("end_location"), // {lat, lng, address}
+  status: text("status").default("scheduled").notNull().$type<"scheduled" | "in_progress" | "completed" | "cancelled">(),
+  rating: integer("rating"),
+  feedback: text("feedback"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const tripsRelations = relations(trips, ({ one, many }) => ({
+  job: one(jobs, {
+    fields: [trips.jobId],
+    references: [jobs.id],
+  }),
+  offer: one(offers, {
+    fields: [trips.offerId],
+    references: [offers.id],
+  }),
+  provider: one(providers, {
+    fields: [trips.providerId],
+    references: [providers.id],
+  }),
+  buyer: one(users, {
+    fields: [trips.buyerId],
+    references: [users.id],
+  }),
+  trackPoints: many(tripTracks),
+}));
+
+// Trip Tracks - GPS coordinate history for trips
+export const tripTracks = pgTable("trip_tracks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tripId: uuid("trip_id").references(() => trips.id).notNull(),
+  latitude: decimal("latitude", { precision: 10, scale: 8 }).notNull(),
+  longitude: decimal("longitude", { precision: 11, scale: 8 }).notNull(),
+  accuracy: decimal("accuracy", { precision: 6, scale: 2 }), // in meters
+  speed: decimal("speed", { precision: 6, scale: 2 }), // in km/h
+  heading: decimal("heading", { precision: 5, scale: 2 }), // in degrees
+  timestamp: timestamp("timestamp").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const tripTracksRelations = relations(tripTracks, ({ one }) => ({
+  trip: one(trips, {
+    fields: [tripTracks.tripId],
+    references: [trips.id],
+  }),
+}));
+
+// Phase 2 Insert Schemas
+export const insertProviderProfileSchema = createInsertSchema(providerProfiles, {
+  portfolioPhotos: z.array(z.string().url()).optional(),
+  socialMedia: z.record(z.string()).optional(),
+}).omit({ 
+  id: true, 
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertVehicleSchema = createInsertSchema(vehicles, {
+  type: z.enum(["sedan", "suv", "van", "bus", "truck", "motorcycle", "other"]),
+  photoUrls: z.array(z.string().url()).optional(),
+}).omit({ 
+  id: true, 
+  createdAt: true,
+  updatedAt: true,
+  status: true,
+});
+
+export const insertProviderDocumentSchema = createInsertSchema(providerDocuments, {
+  type: z.enum(["drivers_license", "vehicle_registration", "insurance", "transport_permit", "trade_license", "certification", "other"]),
+  documentUrl: z.string().url(),
+}).omit({ 
+  id: true, 
+  createdAt: true,
+  updatedAt: true,
+  status: true,
+  verifiedAt: true,
+  verifiedBy: true,
+});
+
+export const insertTripSchema = createInsertSchema(trips, {
+  startLocation: z.record(z.any()).optional(),
+  endLocation: z.record(z.any()).optional(),
+}).omit({ 
+  id: true, 
+  createdAt: true,
+  updatedAt: true,
+  status: true,
+});
+
+export const insertTripTrackSchema = createInsertSchema(tripTracks).omit({ 
+  id: true, 
+  createdAt: true,
+});
+
+// Phase 2 Select Types
+export type ProviderProfile = typeof providerProfiles.$inferSelect;
+export type InsertProviderProfile = z.infer<typeof insertProviderProfileSchema>;
+
+export type Vehicle = typeof vehicles.$inferSelect;
+export type InsertVehicle = z.infer<typeof insertVehicleSchema>;
+
+export type ProviderDocument = typeof providerDocuments.$inferSelect;
+export type InsertProviderDocument = z.infer<typeof insertProviderDocumentSchema>;
+
+export type Trip = typeof trips.$inferSelect;
+export type InsertTrip = z.infer<typeof insertTripSchema>;
+
+export type TripTrack = typeof tripTracks.$inferSelect;
+export type InsertTripTrack = z.infer<typeof insertTripTrackSchema>;
