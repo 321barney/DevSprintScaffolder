@@ -941,6 +941,195 @@ export const approvalsRelations = relations(approvals, ({ one }) => ({
   }),
 }));
 
+// Partner Tiers - Preferred partner tier levels
+export const partnerTiers = pgTable("partner_tiers", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  providerId: uuid("provider_id").references(() => providers.id).notNull(),
+  tier: text("tier").notNull().$type<"bronze" | "silver" | "gold" | "platinum">(),
+  category: text("category").notNull().$type<"hotel" | "venue" | "av_equipment" | "transport" | "dmc">(),
+  margin: decimal("margin", { precision: 5, scale: 2 }).notNull(),
+  reliabilityScore: decimal("reliability_score", { precision: 5, scale: 2 }).default("0").notNull(),
+  benefits: jsonb("benefits").default({}).notNull(),
+  validFrom: timestamp("valid_from").notNull(),
+  validUntil: timestamp("valid_until"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const partnerTiersRelations = relations(partnerTiers, ({ one }) => ({
+  provider: one(providers, {
+    fields: [partnerTiers.providerId],
+    references: [providers.id],
+  }),
+}));
+
+// Corporate Rates - Negotiated pricing between companies and partners
+export const corporateRates = pgTable("corporate_rates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").references(() => companies.id).notNull(),
+  providerId: uuid("provider_id").references(() => providers.id).notNull(),
+  venueId: uuid("venue_id").references(() => venues.id),
+  category: text("category").notNull().$type<"hotel" | "venue" | "av_equipment" | "transport" | "dmc">(),
+  rateType: text("rate_type").notNull().$type<"percentage_discount" | "fixed_price" | "tiered">(),
+  discountPercentage: decimal("discount_percentage", { precision: 5, scale: 2 }),
+  fixedPriceMad: integer("fixed_price_mad"),
+  tiers: jsonb("tiers").default([]).notNull(),
+  validFrom: timestamp("valid_from").notNull(),
+  validUntil: timestamp("valid_until"),
+  minSpendMad: integer("min_spend_mad"),
+  maxUsageCount: integer("max_usage_count"),
+  usageCount: integer("usage_count").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const corporateRatesRelations = relations(corporateRates, ({ one }) => ({
+  company: one(companies, {
+    fields: [corporateRates.companyId],
+    references: [companies.id],
+  }),
+  provider: one(providers, {
+    fields: [corporateRates.providerId],
+    references: [providers.id],
+  }),
+  venue: one(venues, {
+    fields: [corporateRates.venueId],
+    references: [venues.id],
+  }),
+}));
+
+// Milestone Payments - Deposits and payment tracking for bookings
+export const milestonePayments = pgTable("milestone_payments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  groupBookingId: uuid("group_booking_id").references(() => groupBookings.id).notNull(),
+  milestoneType: text("milestone_type").notNull().$type<"deposit" | "pre_event" | "post_event" | "final">(),
+  amountMad: integer("amount_mad").notNull(),
+  dueDate: timestamp("due_date").notNull(),
+  payerId: uuid("payer_id").references(() => users.id),
+  payerType: text("payer_type").$type<"company" | "individual" | "cost_center">(),
+  payerReference: text("payer_reference"),
+  paymentMethod: text("payment_method").$type<"bank_transfer" | "credit_card" | "invoice">(),
+  status: text("status").default("pending").notNull().$type<"pending" | "paid" | "overdue" | "cancelled">(),
+  paidAt: timestamp("paid_at"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const milestonePaymentsRelations = relations(milestonePayments, ({ one }) => ({
+  groupBooking: one(groupBookings, {
+    fields: [milestonePayments.groupBookingId],
+    references: [groupBookings.id],
+  }),
+  payer: one(users, {
+    fields: [milestonePayments.payerId],
+    references: [users.id],
+  }),
+}));
+
+// Event Reports - Spend, savings, RFP conversion metrics
+export const eventReports = pgTable("event_reports", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").references(() => companies.id).notNull(),
+  reportPeriodStart: timestamp("report_period_start").notNull(),
+  reportPeriodEnd: timestamp("report_period_end").notNull(),
+  totalSpendMad: integer("total_spend_mad").default(0).notNull(),
+  totalSavingsMad: integer("total_savings_mad").default(0).notNull(),
+  rfpCount: integer("rfp_count").default(0).notNull(),
+  bookingCount: integer("booking_count").default(0).notNull(),
+  rfpToBookingRate: decimal("rfp_to_booking_rate", { precision: 5, scale: 2 }).default("0").notNull(),
+  onTimePercentage: decimal("on_time_percentage", { precision: 5, scale: 2 }).default("0").notNull(),
+  metrics: jsonb("metrics").default({}).notNull(),
+  generatedAt: timestamp("generated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const eventReportsRelations = relations(eventReports, ({ one }) => ({
+  company: one(companies, {
+    fields: [eventReports.companyId],
+    references: [companies.id],
+  }),
+}));
+
+// Itineraries - Duty of care baseline tracking
+export const itineraries = pgTable("itineraries", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  groupBookingId: uuid("group_booking_id").references(() => groupBookings.id).notNull(),
+  travelerProfileId: uuid("traveler_profile_id").references(() => travelerProfiles.id),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date").notNull(),
+  schedule: jsonb("schedule").default([]).notNull(),
+  emergencyContacts: jsonb("emergency_contacts").default([]).notNull(),
+  riskAssessment: jsonb("risk_assessment").default({}).notNull(),
+  status: text("status").default("draft").notNull().$type<"draft" | "active" | "completed" | "disrupted">(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const itinerariesRelations = relations(itineraries, ({ one, many }) => ({
+  groupBooking: one(groupBookings, {
+    fields: [itineraries.groupBookingId],
+    references: [groupBookings.id],
+  }),
+  travelerProfile: one(travelerProfiles, {
+    fields: [itineraries.travelerProfileId],
+    references: [travelerProfiles.id],
+  }),
+  disruptionAlerts: many(disruptionAlerts),
+}));
+
+// Disruption Alerts - Risk/compliance notifications
+export const disruptionAlerts = pgTable("disruption_alerts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  itineraryId: uuid("itinerary_id").references(() => itineraries.id).notNull(),
+  alertType: text("alert_type").notNull().$type<"weather" | "flight_delay" | "health" | "security" | "other">(),
+  severity: text("severity").notNull().$type<"low" | "medium" | "high" | "critical">(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  actionRequired: boolean("action_required").default(false).notNull(),
+  acknowledgedBy: uuid("acknowledged_by").references(() => users.id),
+  acknowledgedAt: timestamp("acknowledged_at"),
+  resolvedAt: timestamp("resolved_at"),
+  metadata: jsonb("metadata").default({}).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const disruptionAlertsRelations = relations(disruptionAlerts, ({ one }) => ({
+  itinerary: one(itineraries, {
+    fields: [disruptionAlerts.itineraryId],
+    references: [itineraries.id],
+  }),
+  acknowledger: one(users, {
+    fields: [disruptionAlerts.acknowledgedBy],
+    references: [users.id],
+  }),
+}));
+
+// DMC Partners - Destination Management Companies
+export const dmcPartners = pgTable("dmc_partners", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  providerId: uuid("provider_id").references(() => providers.id).notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  destinations: jsonb("destinations").default([]).notNull(),
+  services: jsonb("services").default([]).notNull(),
+  minGroupSize: integer("min_group_size"),
+  maxGroupSize: integer("max_group_size"),
+  languagesOffered: jsonb("languages_offered").default([]).notNull(),
+  certifications: jsonb("certifications").default([]).notNull(),
+  insuranceProvider: text("insurance_provider"),
+  emergencyContact: jsonb("emergency_contact").default({}).notNull(),
+  rating: decimal("rating", { precision: 3, scale: 2 }).default("0").notNull(),
+  verified: boolean("verified").default(false).notNull(),
+  status: text("status").default("active").notNull().$type<"active" | "inactive" | "pending">(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const dmcPartnersRelations = relations(dmcPartners, ({ one }) => ({
+  provider: one(providers, {
+    fields: [dmcPartners.providerId],
+    references: [providers.id],
+  }),
+}));
+
 // Phase 3 Insert Schemas
 export const insertCompanySchema = createInsertSchema(companies, {
   paymentTerms: z.enum(["net-15", "net-30", "net-60", "prepaid"]).optional(),
@@ -1036,6 +1225,82 @@ export const insertApprovalSchema = createInsertSchema(approvals, {
   approvedAt: true,
 });
 
+export const insertPartnerTierSchema = createInsertSchema(partnerTiers, {
+  tier: z.enum(["bronze", "silver", "gold", "platinum"]),
+  category: z.enum(["hotel", "venue", "av_equipment", "transport", "dmc"]),
+  benefits: z.record(z.any()).optional(),
+}).omit({ 
+  id: true, 
+  createdAt: true,
+});
+
+export const insertCorporateRateSchema = createInsertSchema(corporateRates, {
+  category: z.enum(["hotel", "venue", "av_equipment", "transport", "dmc"]),
+  rateType: z.enum(["percentage_discount", "fixed_price", "tiered"]),
+  tiers: z.array(z.record(z.any())).optional(),
+}).omit({ 
+  id: true, 
+  createdAt: true,
+  usageCount: true,
+});
+
+export const insertMilestonePaymentSchema = createInsertSchema(milestonePayments, {
+  milestoneType: z.enum(["deposit", "pre_event", "post_event", "final"]),
+  payerType: z.enum(["company", "individual", "cost_center"]).optional(),
+  paymentMethod: z.enum(["bank_transfer", "credit_card", "invoice"]).optional(),
+}).omit({ 
+  id: true, 
+  createdAt: true,
+  status: true,
+  paidAt: true,
+});
+
+export const insertEventReportSchema = createInsertSchema(eventReports, {
+  metrics: z.record(z.any()).optional(),
+}).omit({ 
+  id: true, 
+  createdAt: true,
+  generatedAt: true,
+});
+
+export const insertItinerarySchema = createInsertSchema(itineraries, {
+  schedule: z.array(z.record(z.any())).optional(),
+  emergencyContacts: z.array(z.record(z.any())).optional(),
+  riskAssessment: z.record(z.any()).optional(),
+}).omit({ 
+  id: true, 
+  createdAt: true,
+  updatedAt: true,
+  status: true,
+});
+
+export const insertDisruptionAlertSchema = createInsertSchema(disruptionAlerts, {
+  alertType: z.enum(["weather", "flight_delay", "health", "security", "other"]),
+  severity: z.enum(["low", "medium", "high", "critical"]),
+  metadata: z.record(z.any()).optional(),
+}).omit({ 
+  id: true, 
+  createdAt: true,
+  acknowledgedBy: true,
+  acknowledgedAt: true,
+  resolvedAt: true,
+});
+
+export const insertDmcPartnerSchema = createInsertSchema(dmcPartners, {
+  destinations: z.array(z.string()).optional(),
+  services: z.array(z.string()).optional(),
+  languagesOffered: z.array(z.string()).optional(),
+  certifications: z.array(z.string()).optional(),
+  emergencyContact: z.record(z.any()).optional(),
+}).omit({ 
+  id: true, 
+  createdAt: true,
+  updatedAt: true,
+  status: true,
+  verified: true,
+  rating: true,
+});
+
 // Phase 3 Select Types
 export type Company = typeof companies.$inferSelect;
 export type InsertCompany = z.infer<typeof insertCompanySchema>;
@@ -1063,3 +1328,24 @@ export type InsertGroupBooking = z.infer<typeof insertGroupBookingSchema>;
 
 export type Approval = typeof approvals.$inferSelect;
 export type InsertApproval = z.infer<typeof insertApprovalSchema>;
+
+export type PartnerTier = typeof partnerTiers.$inferSelect;
+export type InsertPartnerTier = z.infer<typeof insertPartnerTierSchema>;
+
+export type CorporateRate = typeof corporateRates.$inferSelect;
+export type InsertCorporateRate = z.infer<typeof insertCorporateRateSchema>;
+
+export type MilestonePayment = typeof milestonePayments.$inferSelect;
+export type InsertMilestonePayment = z.infer<typeof insertMilestonePaymentSchema>;
+
+export type EventReport = typeof eventReports.$inferSelect;
+export type InsertEventReport = z.infer<typeof insertEventReportSchema>;
+
+export type Itinerary = typeof itineraries.$inferSelect;
+export type InsertItinerary = z.infer<typeof insertItinerarySchema>;
+
+export type DisruptionAlert = typeof disruptionAlerts.$inferSelect;
+export type InsertDisruptionAlert = z.infer<typeof insertDisruptionAlertSchema>;
+
+export type DmcPartner = typeof dmcPartners.$inferSelect;
+export type InsertDmcPartner = z.infer<typeof insertDmcPartnerSchema>;
