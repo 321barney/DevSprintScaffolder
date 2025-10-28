@@ -1,7 +1,7 @@
-# Trip to Work - Morocco Tourism & Service Platform
+# Trip2work - Morocco Tourism & Service Platform
 
 ## Overview
-Trip to Work is a Morocco-focused tourism and service platform connecting tourists and buyers with verified service providers (transport, tours, handymen, guides). It enables providers to build their brand through public profiles and portfolios. Key features include an interactive map-based marketplace, GPS tracking, AI-assisted pricing, photo uploads, and multi-language support (FR/AR/EN with RTL). The platform aims to monetize through a commission system and subscription tiers for providers.
+Trip2work is a Morocco-focused tourism and service platform connecting tourists and buyers with verified service providers (transport, tours, handymen, guides). It enables providers to build their brand through public profiles and portfolios. Key features include an interactive map-based marketplace, GPS tracking, AI-assisted pricing, photo uploads, and multi-language support (FR/AR/EN with RTL). The platform aims to monetize through a commission system and subscription tiers for providers.
 
 ## User Preferences
 No specific user preferences were provided in the original document.

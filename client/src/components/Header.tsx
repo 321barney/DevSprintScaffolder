@@ -53,19 +53,21 @@ export function Header() {
             {t('nav.home')}
           </Button>
           <Button
-            variant={location.startsWith('/jobs') ? 'secondary' : 'ghost'}
-            onClick={() => setLocation('/jobs')}
-            data-testid="nav-jobs"
+            variant={location.startsWith('/browse') ? 'secondary' : 'ghost'}
+            onClick={() => setLocation('/browse')}
+            data-testid="nav-browse"
           >
-            {t('nav.jobs')}
+            {t('nav.browse')}
           </Button>
-          <Button
-            variant={location.startsWith('/messages') ? 'secondary' : 'ghost'}
-            onClick={() => setLocation('/messages')}
-            data-testid="nav-messages"
-          >
-            {t('nav.messages')}
-          </Button>
+          {currentUser && (
+            <Button
+              variant={location.startsWith('/jobs') ? 'secondary' : 'ghost'}
+              onClick={() => setLocation('/jobs')}
+              data-testid="nav-jobs"
+            >
+              {t('nav.jobs')}
+            </Button>
+          )}
         </nav>
 
         {/* Actions */}
@@ -83,6 +85,14 @@ export function Header() {
                   {t('home.cta.post')}
                 </Button>
               )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setLocation('/messages')}
+                data-testid="button-messages"
+              >
+                {t('nav.messages')}
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
