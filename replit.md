@@ -1,7 +1,7 @@
 # Trip2work - Morocco Tourism & Service Platform
 
 ## Overview
-Trip2work is a Morocco-focused tourism and service platform connecting tourists and buyers with verified service providers (transport, tours, handymen, guides). It enables providers to build their brand through public profiles and portfolios. Key features include an interactive map-based marketplace, GPS tracking, AI-assisted pricing, photo uploads, and multi-language support (FR/AR/EN with RTL). The platform aims to monetize through a commission system and subscription tiers for providers.
+Trip2work is a Morocco-focused tourism and service platform connecting tourists and buyers with verified service providers (transport, tours, handymen, guides). It enables providers to build their brand through public profiles and portfolios. Key features include an interactive map-based marketplace, GPS tracking, AI-assisted pricing, photo uploads, and multi-language support (FR/AR/EN with RTL). The platform now supports B2B/MICE (Meetings, Incentives, Conferences & Events) with corporate workspaces, venue management, RFP workflows, group bookings, and enterprise invoicing. The platform monetizes through a commission system and subscription tiers for providers.
 
 ## User Preferences
 No specific user preferences were provided in the original document.
@@ -29,12 +29,19 @@ No specific user preferences were provided in the original document.
 - **Provider Profiles**: Public profiles with photos, portfolios, and verified credentials.
 - **Subscription Tiers**: Starter, Professional, Fleet with varying offer limits and commission rates.
 - **Private Messaging**: Accessible via job details only.
+- **B2B/MICE Features**:
+  - **Venue Marketplace**: Browse venues with filters (city, type, verified, invoice-ready), venue details with rooms, capacity, amenities.
+  - **RFP Workflow**: Create RFPs, submit quotes, compare quotes side-by-side.
+  - **Corporate Workspace**: Company accounts, cost centers, traveler profiles, approval workflows.
+  - **Enterprise Features**: VAT-compliant invoicing, PO numbers, payment terms (Net-15/30), SLA response times.
+  - **Group Bookings**: Room blocks, rooming lists, deposit schedules.
 
 ### System Design Choices
 - **Database**: PostgreSQL with Drizzle ORM.
     - **Core Tables**: `users`, `providers`, `jobs`, `offers`, `messages`, `ratings`, `financing_offers`.
     - **Monetization Tables**: `platform_fees`, `provider_subscriptions`, `transactions`, `provider_earnings`.
     - **Trip to Work Tables**: `provider_profiles`, `vehicles`, `provider_documents`, `trips`, `trip_tracks`.
+    - **MICE/B2B Tables**: `companies`, `cost_centers`, `traveler_profiles`, `venues`, `venue_rooms`, `rfps`, `quotes`, `group_bookings`, `approvals`.
 - **API Endpoints**:
     - **Authentication**: `POST /api/auth/signup`, `POST /api/auth/login`.
     - **Jobs**: `POST /api/jobs`, `GET /api/jobs`, `GET /api/jobs/:id`, `POST /api/jobs/:id/cancel`.
@@ -42,6 +49,9 @@ No specific user preferences were provided in the original document.
     - **Providers**: `POST /api/providers`, `GET /api/providers/:id`, `GET /api/providers`.
     - **Messaging**: `GET /api/jobs/:id/messages`, `POST /api/messages`, `GET /api/messages/conversations`.
     - **Ratings & Financing**: `POST /api/ratings`, `GET /api/financing/:jobId/offers`, `POST /api/financing/prequal`.
+    - **MICE - Venues**: `GET /api/venues`, `POST /api/venues`, `GET /api/venues/:id`, `PATCH /api/venues/:id`, `POST /api/venues/:venueId/rooms`, `GET /api/venues/:venueId/rooms`.
+    - **MICE - RFPs**: `GET /api/rfps`, `POST /api/rfps`, `GET /api/rfps/:id`, `PATCH /api/rfps/:id`, `GET /api/rfps/:id/quotes`, `POST /api/rfps/:id/quotes`.
+    - **MICE - Corporate**: `POST /api/companies`, `GET /api/companies/:id`, `GET /api/companies/:id/cost-centers`, `POST /api/cost-centers`, `GET /api/companies/:id/travelers`, `POST /api/traveler-profiles`, `GET /api/approvals/pending`, `POST /api/approvals`, `PATCH /api/approvals/:id`, `GET /api/companies/:id/bookings`, `POST /api/group-bookings`.
 - **AI Modules**:
     - **Pricing Band**: `server/ai/pricing.ts` calculates price ranges based on city, category, distance, passengers, and time.
     - **Offer Scoring**: `server/ai/scoring.ts` scores offers based on provider rating, price fairness, ETA, compliance, and job fit.
