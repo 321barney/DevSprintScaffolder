@@ -3,8 +3,8 @@ import type { Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import bcrypt from "bcrypt";
 import { storage } from "./storage";
-import { calculatePriceBand, structureJobDescription } from "./ai/pricing";
-import { scoreOffer, calculateCompliance, calculateFit } from "./ai/scoring";
+import { generateDynamicPriceBand, scoreOffer as scoreOfferWithAI } from "./services/ai-pricing";
+import { canProviderSubmitOffer, consumeFreeOffer, incrementPaidOfferCounter, processOfferAcceptance, getOrCreateSubscription } from "./services/commission";
 import { logAudit, AUDIT_ACTIONS } from "./audit";
 import { insertUserSchema, insertProviderSchema, insertJobSchema, insertOfferSchema, insertMessageSchema, insertRatingSchema } from "@shared/schema";
 import { z } from "zod";
@@ -215,32 +215,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }));
 
   app.post("/api/jobs", requireAuth, requireRole('buyer'), asyncHandler(async (req, res) => {
-    const { description, category, city, budgetHintMad } = req.body;
+    const { description, category, city, budgetHintMad, spec } = req.body;
 
     // Get buyer ID from authenticated session
     const buyerId = req.session.userId!;
 
-    // AI: Structure the description into spec
-    let spec = structureJobDescription(description, category);
-    
-    // AI: Calculate price band
-    const priceBand = calculatePriceBand({
-      city: city || 'Casablanca',
+    // Phase 1: Generate dynamic price band with AI
+    const priceBand = await generateDynamicPriceBand({
       category,
-      km: spec.km,
-      pax: spec.pax,
+      city: city || 'Casablanca',
+      description: description || '',
+      distanceKm: spec?.km || spec?.distance,
+      pax: spec?.pax || spec?.passengers,
       timeISO: new Date().toISOString(),
     });
 
-    // Add price band to spec
-    spec.priceBand = priceBand;
+    // Merge spec with price band
+    const jobSpec = {
+      ...(spec || {}),
+      description: description || '',
+      priceBand: {
+        minMAD: priceBand.minMAD,
+        maxMAD: priceBand.maxMAD,
+        recommendedMAD: priceBand.recommendedMAD,
+        aiGenerated: priceBand.aiGenerated,
+      },
+    };
 
     const job = await storage.createJob({
       buyerId,
       category,
       city,
-      spec,
-      budgetHintMad: budgetHintMad || priceBand.high,
+      spec: jobSpec,
+      budgetHintMad: budgetHintMad || priceBand.recommendedMAD,
     });
 
     // Audit log
@@ -249,7 +256,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       action: AUDIT_ACTIONS.JOB_CREATE,
       resourceType: 'job',
       resourceId: job.id,
-      changes: { category, city, budgetHintMad: job.budgetHintMad },
+      changes: { category, city, budgetHintMad: job.budgetHintMad, aiPricing: priceBand.aiGenerated },
       req,
     });
 
@@ -319,32 +326,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     const providerId = userProvider.id;
 
-    // Get job and provider details for scoring
+    // Phase 1: Check subscription tier and free offer limits
+    const eligibility = await canProviderSubmitOffer(providerId);
+    if (!eligibility.allowed) {
+      return res.status(403).json({
+        error: "Cannot submit offer",
+        reason: eligibility.reason,
+        tier: eligibility.subscriptionTier,
+        freeOffersRemaining: eligibility.freeOffersRemaining,
+        needsUpgrade: true,
+      });
+    }
+
+    // Get job for AI scoring
     const job = await storage.getJob(jobId);
     if (!job) {
       return res.status(404).json({ error: "Job not found" });
     }
 
-    // Calculate AI score
+    // Phase 1: Calculate AI score using new scoring service
     const jobSpec = job.spec as any;
-    const priceBand = jobSpec.priceBand || { low: 0, high: 10000 };
+    const priceBand = jobSpec.priceBand || { minMAD: 0, maxMAD: 10000, recommendedMAD: 5000 };
     
-    const compliance = calculateCompliance(
-      userProvider.permits as Record<string, boolean>,
-      userProvider.verified
-    );
-    
-    const fit = calculateFit(jobSpec, { capacity: 4, maxDistance: 500 }); // TODO: Get from provider profile
-
-    const aiScore = scoreOffer({
-      fit,
-      eta: etaMin / 120, // Normalize to 0-1 (assuming max 120 min)
-      price: priceMad,
-      fair: priceBand,
-      rating: parseFloat(userProvider.rating || '0'),
-      reliability: userProvider.verified ? 0.9 : 0.5,
-      compliance,
-      distance: 0.2, // TODO: Calculate actual distance
+    const aiScore = await scoreOfferWithAI({
+      offer: {
+        priceMad,
+        etaMin,
+        notes,
+      },
+      job: {
+        category: job.category,
+        city: job.city || 'Casablanca',
+        description: jobSpec.description || '',
+        budgetHintMad: job.budgetHintMad,
+      },
+      provider: {
+        rating: userProvider.rating || '0',
+        verified: userProvider.verified,
+      },
+      priceBand,
     });
 
     const offer = await storage.createOffer({
@@ -358,17 +378,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
     });
 
+    // Phase 1: Consume free offer if applicable, or increment paid counter
+    if (eligibility.subscriptionTier === 'free' && eligibility.freeOffersRemaining && eligibility.freeOffersRemaining > 0) {
+      await consumeFreeOffer(providerId);
+    } else if (eligibility.subscriptionTier !== 'free') {
+      await incrementPaidOfferCounter(providerId);
+    }
+
     // Audit log
     await logAudit({
       userId,
       action: AUDIT_ACTIONS.OFFER_SUBMIT,
       resourceType: 'offer',
       resourceId: offer.id,
-      changes: { jobId, providerId, priceMad, aiScore },
+      changes: { 
+        jobId, 
+        providerId, 
+        priceMad, 
+        aiScore,
+        tier: eligibility.subscriptionTier,
+        freeOffersRemaining: eligibility.freeOffersRemaining,
+      },
       req,
     });
 
-    res.json(offer);
+    res.json({
+      ...offer,
+      eligibility: {
+        tier: eligibility.subscriptionTier,
+        freeOffersRemaining: eligibility.freeOffersRemaining,
+      },
+    });
   }));
 
   app.post("/api/offers/:id/accept", requireAuth, requireRole('buyer'), asyncHandler(async (req, res) => {
@@ -390,6 +430,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(403).json({ error: "Not authorized to accept this offer" });
     }
 
+    // Phase 1: Process commission and record earnings
+    const { platformFee, providerEarning, commission } = await processOfferAcceptance(offerId);
+
     // Update offer status
     const updatedOffer = await storage.updateOffer(offerId, { status: 'accepted' });
 
@@ -410,11 +453,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       action: AUDIT_ACTIONS.OFFER_ACCEPT,
       resourceType: 'offer',
       resourceId: offerId,
-      changes: { jobId: offer.jobId, status: 'accepted' },
+      changes: { 
+        jobId: offer.jobId, 
+        status: 'accepted',
+        platformCommission: commission.commissionAmountMad,
+        providerNet: commission.providerNetMad,
+        commissionRate: commission.commissionRate,
+      },
       req,
     });
 
-    res.json(updatedOffer);
+    res.json({
+      ...updatedOffer,
+      commission: {
+        gross: commission.grossAmountMad,
+        platformFee: commission.commissionAmountMad,
+        providerNet: commission.providerNetMad,
+        rate: commission.commissionRate,
+        platformFeeId: platformFee.id,
+        earningId: providerEarning.id,
+      },
+    });
   }));
 
   // ===== MESSAGE ROUTES =====
@@ -498,16 +557,108 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   }));
 
-  // ===== AI ENDPOINTS (internal/demo) =====
-  app.post("/api/ai/structure-job", asyncHandler(async (req, res) => {
-    const { text, category } = req.body;
-    const spec = structureJobDescription(text, category);
-    res.json(spec);
+  // ===== PHASE 1: SUBSCRIPTION & PAYMENT ROUTES =====
+  
+  // Get provider's subscription status
+  app.get("/api/subscription", requireAuth, requireRole('provider'), asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const provider = await storage.getProviderByUserId(userId);
+    
+    if (!provider) {
+      return res.status(404).json({ error: "Provider profile not found" });
+    }
+
+    const subscription = await getOrCreateSubscription(provider.id);
+    const eligibility = await canProviderSubmitOffer(provider.id);
+
+    res.json({
+      subscription,
+      eligibility,
+    });
   }));
 
-  app.post("/api/ai/price-band", asyncHandler(async (req, res) => {
-    const priceBand = calculatePriceBand(req.body);
-    res.json(priceBand);
+  // Purchase subscription (Basic or Pro)
+  app.post("/api/subscription/purchase", requireAuth, requireRole('provider'), asyncHandler(async (req, res) => {
+    const { tier } = req.body;
+    const userId = req.session.userId!;
+    
+    if (tier !== 'basic' && tier !== 'pro') {
+      return res.status(400).json({ error: "Invalid tier. Must be 'basic' or 'pro'" });
+    }
+
+    const provider = await storage.getProviderByUserId(userId);
+    if (!provider) {
+      return res.status(404).json({ error: "Provider profile not found" });
+    }
+
+    // Import payment service dynamically to avoid circular deps
+    const { purchaseSubscription } = await import("./services/payment");
+    
+    // Initiate payment
+    const paymentResult = await purchaseSubscription(provider.id, tier);
+
+    if (!paymentResult.success) {
+      return res.status(500).json({ 
+        error: "Payment failed",
+        details: paymentResult.error,
+      });
+    }
+
+    res.json({
+      success: true,
+      transaction: paymentResult.transactionId,
+      paymentUrl: paymentResult.paymentUrl, // For redirect-based payments
+      status: paymentResult.status,
+    });
+  }));
+
+  // Provider earnings summary
+  app.get("/api/earnings", requireAuth, requireRole('provider'), asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const provider = await storage.getProviderByUserId(userId);
+    
+    if (!provider) {
+      return res.status(404).json({ error: "Provider profile not found" });
+    }
+
+    const { getProviderEarningsSummary } = await import("./services/commission");
+    const summary = await getProviderEarningsSummary(provider.id);
+
+    res.json(summary);
+  }));
+
+  // Transaction history
+  app.get("/api/transactions", requireAuth, requireRole('provider'), asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const provider = await storage.getProviderByUserId(userId);
+    
+    if (!provider) {
+      return res.status(404).json({ error: "Provider profile not found" });
+    }
+
+    const txList = await storage.getTransactionsByProviderId(provider.id);
+    res.json(txList);
+  }));
+
+  // Payment callback webhook (called by PSP after payment)
+  app.post("/api/payment/callback", asyncHandler(async (req, res) => {
+    const { transactionId, pspTransactionId, status, signature } = req.body;
+    
+    const { handlePaymentCallback } = await import("./services/payment");
+    
+    const result = await handlePaymentCallback({
+      transactionId,
+      pspTransactionId,
+      status,
+      signature,
+      callbackData: req.body,
+    });
+
+    if (result.success) {
+      res.json({ success: true });
+    } else {
+      res.status(400).json({ error: result.error });
+    }
   }));
 
   const httpServer = createServer(app);
