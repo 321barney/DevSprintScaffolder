@@ -54,23 +54,26 @@ export default function PostJob() {
       });
       setLocation(`/jobs/${newJob.id}`);
     },
-    onError: () => {
+    onError: (error: any) => {
+      console.error('Job creation error:', error);
       toast({
         title: 'Erreur',
-        description: 'Impossible de publier le travail',
+        description: error?.message || 'Impossible de publier le travail',
         variant: 'destructive',
       });
     },
   });
 
   const handleSubmit = async () => {
-    createJobMutation.mutate({
+    const payload = {
       description: formData.description,
       category: formData.category,
       city: formData.city,
       budgetHintMad: formData.budgetHintMad ? parseInt(formData.budgetHintMad) : undefined,
       buyerId: 'demo-buyer', // TODO: Get from auth context
-    });
+    };
+    console.log('Submitting job with payload:', payload);
+    createJobMutation.mutate(payload);
   };
 
   return (
