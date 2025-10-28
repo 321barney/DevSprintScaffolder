@@ -98,12 +98,12 @@ export default function MeetingsEvents() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">{t('job.post.city')}</label>
-                <Select value={cityFilter} onValueChange={setCityFilter}>
+                <Select value={cityFilter || "all"} onValueChange={(val) => setCityFilter(val === "all" ? "" : val)}>
                   <SelectTrigger data-testid="select-city-filter">
                     <SelectValue placeholder={t('job.post.city')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Cities</SelectItem>
+                    <SelectItem value="all">All Cities</SelectItem>
                     {cities.map(city => (
                       <SelectItem key={city} value={city}>{city}</SelectItem>
                     ))}
@@ -113,12 +113,12 @@ export default function MeetingsEvents() {
 
               <div className="space-y-2">
                 <label className="text-sm font-medium">{t('venue.filter.features')}</label>
-                <Select value={typeFilter} onValueChange={setTypeFilter}>
+                <Select value={typeFilter || "all"} onValueChange={(val) => setTypeFilter(val === "all" ? "" : val)}>
                   <SelectTrigger data-testid="select-type-filter">
                     <SelectValue placeholder="Type" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Types</SelectItem>
+                    <SelectItem value="all">All Types</SelectItem>
                     {venueTypes.map(type => (
                       <SelectItem key={type} value={type}>
                         {t(`venue.type.${type}` as any)}
