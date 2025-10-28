@@ -11,12 +11,16 @@ import JobDetail from "@/pages/JobDetail";
 import PostJob from "@/pages/PostJob";
 import ProviderSignup from "@/pages/ProviderSignup";
 import Messages from "@/pages/Messages";
+import Login from "@/pages/Login";
+import Signup from "@/pages/Signup";
 import NotFound from "@/pages/not-found";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
+      <Route path="/login" component={Login} />
+      <Route path="/signup" component={Signup} />
       <Route path="/jobs" component={Jobs} />
       <Route path="/jobs/:id" component={JobDetail} />
       <Route path="/post-job" component={PostJob} />

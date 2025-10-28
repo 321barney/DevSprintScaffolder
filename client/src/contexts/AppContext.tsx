@@ -9,6 +9,7 @@ interface AppContextType {
   setTheme: (theme: 'light' | 'dark') => void;
   currentUser: User | null;
   setCurrentUser: (user: User | null) => void;
+  isAuthLoading: boolean;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -25,6 +26,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   });
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   const setLocale = (newLocale: Locale) => {
     setLocaleState(newLocale);
@@ -40,6 +42,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setThemeState(newTheme);
     localStorage.setItem('soukmatch-theme', newTheme);
   };
+
+  // Fetch current user on mount
+  useEffect(() => {
+    async function fetchCurrentUser() {
+      try {
+        const response = await fetch('/api/auth/me', {
+          credentials: 'include',
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setCurrentUser(data.user);
+        }
+      } catch (error) {
+        // User not logged in, that's fine
+      } finally {
+        setIsAuthLoading(false);
+      }
+    }
+    fetchCurrentUser();
+  }, []);
 
   useEffect(() => {
     // Apply theme
@@ -58,7 +80,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [locale]);
 
   return (
-    <AppContext.Provider value={{ locale, setLocale, theme, setTheme, currentUser, setCurrentUser }}>
+    <AppContext.Provider value={{ locale, setLocale, theme, setTheme, currentUser, setCurrentUser, isAuthLoading }}>
       {children}
     </AppContext.Provider>
   );

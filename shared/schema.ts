@@ -167,6 +167,26 @@ export const ratingsRelations = relations(ratings, ({ one }) => ({
   }),
 }));
 
+// Audit Logs - Immutable log of critical operations
+export const auditLogs = pgTable("audit_logs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").references(() => users.id),
+  action: text("action").notNull(),
+  resourceType: text("resource_type").notNull(),
+  resourceId: text("resource_id"),
+  changes: jsonb("changes"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
+  user: one(users, {
+    fields: [auditLogs.userId],
+    references: [users.id],
+  }),
+}));
+
 // Insert Schemas
 export const insertUserSchema = createInsertSchema(users, {
   email: z.string().email().optional(),
@@ -207,6 +227,11 @@ export const insertRatingSchema = createInsertSchema(ratings, {
   tags: z.array(z.string()).optional(),
 }).omit({ id: true, createdAt: true });
 
+export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ 
+  id: true, 
+  createdAt: true,
+});
+
 // Select Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -228,3 +253,6 @@ export type InsertMessage = z.infer<typeof insertMessageSchema>;
 
 export type Rating = typeof ratings.$inferSelect;
 export type InsertRating = z.infer<typeof insertRatingSchema>;
+
+export type AuditLog = typeof auditLogs.$inferSelect;
+export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;

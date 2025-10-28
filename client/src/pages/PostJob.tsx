@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -27,7 +27,7 @@ const moroccanCities = [
 ];
 
 export default function PostJob() {
-  const { locale } = useApp();
+  const { locale, currentUser, isAuthLoading } = useApp();
   const { t } = useTranslation(locale);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -38,6 +38,36 @@ export default function PostJob() {
     city: '',
     budgetHintMad: '',
   });
+
+  // SECURITY: Wait for auth to load, then check permissions
+  useEffect(() => {
+    // Don't redirect while still loading
+    if (isAuthLoading) return;
+
+    if (!currentUser) {
+      toast({
+        title: t('auth.required'),
+        description: t('auth.required.message'),
+        variant: 'destructive',
+      });
+      setLocation('/login');
+      return;
+    }
+
+    if (currentUser.role !== 'buyer') {
+      toast({
+        title: t('auth.buyer.only'),
+        description: t('auth.buyer.only.message'),
+        variant: 'destructive',
+      });
+      setLocation('/jobs');
+    }
+  }, [currentUser, isAuthLoading, setLocation, toast, t]);
+
+  // Show nothing while checking auth or if unauthorized
+  if (isAuthLoading || !currentUser || currentUser.role !== 'buyer') {
+    return null;
+  }
 
   const handleCategorySelect = (category: string) => {
     setFormData({ ...formData, category });
@@ -74,7 +104,6 @@ export default function PostJob() {
       category: formData.category,
       city: formData.city,
       budgetHintMad: formData.budgetHintMad ? parseInt(formData.budgetHintMad) : undefined,
-      buyerId: '80bc66ef-1602-4a00-9272-0aef66d83d3c', // TODO: Get from auth context (ahmed@example.ma)
     };
     console.log('Submitting job with payload:', payload);
     createJobMutation.mutate(payload);

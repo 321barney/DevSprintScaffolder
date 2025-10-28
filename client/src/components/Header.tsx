@@ -4,12 +4,29 @@ import { ThemeToggle } from './ThemeToggle';
 import { useTranslation } from '@/lib/i18n';
 import { useApp } from '@/contexts/AppContext';
 import { useLocation } from 'wouter';
-import { Plus, Briefcase } from 'lucide-react';
+import { useMutation } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
+import { useToast } from '@/hooks/use-toast';
+import { Plus, Briefcase, LogOut, LogIn, UserPlus } from 'lucide-react';
 
 export function Header() {
-  const { locale } = useApp();
+  const { locale, currentUser, setCurrentUser } = useApp();
   const { t } = useTranslation(locale);
   const [location, setLocation] = useLocation();
+  const { toast } = useToast();
+
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest('POST', '/api/auth/logout', {});
+    },
+    onSuccess: () => {
+      setCurrentUser(null);
+      toast({
+        title: t('auth.logout.success'),
+      });
+      setLocation('/');
+    },
+  });
 
   return (
     <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -53,15 +70,51 @@ export function Header() {
 
         {/* Actions */}
         <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            onClick={() => setLocation('/post-job')}
-            className="hidden sm:flex"
-            data-testid="button-header-post-job"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            {t('home.cta.post')}
-          </Button>
+          {currentUser ? (
+            <>
+              {currentUser.role === 'buyer' && (
+                <Button
+                  size="sm"
+                  onClick={() => setLocation('/post-job')}
+                  className="hidden sm:flex"
+                  data-testid="button-header-post-job"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  {t('home.cta.post')}
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => logoutMutation.mutate()}
+                disabled={logoutMutation.isPending}
+                data-testid="button-logout"
+              >
+                <LogOut className="w-4 h-4 mr-2" />
+                {t('auth.logout')}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setLocation('/login')}
+                data-testid="button-login"
+              >
+                <LogIn className="w-4 h-4 mr-2" />
+                {t('auth.login')}
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => setLocation('/signup')}
+                data-testid="button-signup"
+              >
+                <UserPlus className="w-4 h-4 mr-2" />
+                {t('auth.signup')}
+              </Button>
+            </>
+          )}
           <LanguageSwitcher />
           <ThemeToggle />
         </div>

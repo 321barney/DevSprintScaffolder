@@ -5,6 +5,7 @@ import bcrypt from "bcrypt";
 import { storage } from "./storage";
 import { calculatePriceBand, structureJobDescription } from "./ai/pricing";
 import { scoreOffer, calculateCompliance, calculateFit } from "./ai/scoring";
+import { logAudit, AUDIT_ACTIONS } from "./audit";
 import { insertUserSchema, insertProviderSchema, insertJobSchema, insertOfferSchema, insertMessageSchema, insertRatingSchema } from "@shared/schema";
 import { z } from "zod";
 
@@ -47,6 +48,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(400).json({ error: "Password must be at least 8 characters" });
     }
 
+    // SECURITY: Whitelist roles - never trust client input for authorization
+    const allowedRoles = ['buyer', 'provider'] as const;
+    const validatedRole = allowedRoles.includes(role) ? role : 'buyer';
+
     // Check if user exists
     const existing = await storage.getUserByEmail(email);
     if (existing) {
@@ -59,7 +64,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const user = await storage.createUser({
       email,
       password: hashedPassword,
-      role: role || 'buyer',
+      role: validatedRole,
       locale: locale || 'fr-MA',
     });
 
@@ -67,6 +72,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     req.session.userId = user.id;
     req.session.role = user.role;
     req.session.email = user.email;
+
+    // Audit log
+    await logAudit({
+      userId: user.id,
+      action: AUDIT_ACTIONS.USER_SIGNUP,
+      resourceType: 'user',
+      resourceId: user.id,
+      changes: { email: user.email, role: user.role },
+      req,
+    });
 
     res.json({ user: { ...user, password: undefined } });
   }));
@@ -94,10 +109,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     req.session.role = user.role;
     req.session.email = user.email;
 
+    // Audit log
+    await logAudit({
+      userId: user.id,
+      action: AUDIT_ACTIONS.USER_LOGIN,
+      resourceType: 'user',
+      resourceId: user.id,
+      req,
+    });
+
     res.json({ user: { ...user, password: undefined } });
   }));
 
   app.post("/api/auth/logout", asyncHandler(async (req, res) => {
+    const userId = req.session.userId;
+    
+    // Audit log before destroying session
+    if (userId) {
+      await logAudit({
+        userId,
+        action: AUDIT_ACTIONS.USER_LOGOUT,
+        resourceType: 'user',
+        resourceId: userId,
+        req,
+      });
+    }
+
     req.session.destroy((err) => {
       if (err) {
         return res.status(500).json({ error: "Logout failed" });
@@ -116,9 +153,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }));
 
   // ===== PROVIDER ROUTES =====
-  app.post("/api/providers", asyncHandler(async (req, res) => {
-    const data = insertProviderSchema.parse(req.body);
-    const provider = await storage.createProvider(data);
+  app.post("/api/providers", requireAuth, requireRole('provider'), asyncHandler(async (req, res) => {
+    const { displayName, city, permits } = req.body;
+    const userId = req.session.userId!;
+    
+    // Check if provider profile already exists
+    const existing = await storage.getProviderByUserId(userId);
+    if (existing) {
+      return res.status(400).json({ error: "Provider profile already exists" });
+    }
+
+    const provider = await storage.createProvider({
+      userId,
+      displayName,
+      city,
+      permits,
+      verified: false,
+    });
+
+    // Audit log
+    await logAudit({
+      userId,
+      action: AUDIT_ACTIONS.PROVIDER_CREATE,
+      resourceType: 'provider',
+      resourceId: provider.id,
+      changes: { displayName, city, verified: false },
+      req,
+    });
+
     res.json(provider);
   }));
 
@@ -152,8 +214,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(jobsWithOfferCount);
   }));
 
-  app.post("/api/jobs", asyncHandler(async (req, res) => {
-    const { description, category, city, budgetHintMad, buyerId } = req.body;
+  app.post("/api/jobs", requireAuth, requireRole('buyer'), asyncHandler(async (req, res) => {
+    const { description, category, city, budgetHintMad } = req.body;
+
+    // Get buyer ID from authenticated session
+    const buyerId = req.session.userId!;
 
     // AI: Structure the description into spec
     let spec = structureJobDescription(description, category);
@@ -171,11 +236,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     spec.priceBand = priceBand;
 
     const job = await storage.createJob({
-      buyerId: buyerId || 'demo-buyer', // TODO: Get from session
+      buyerId,
       category,
       city,
       spec,
       budgetHintMad: budgetHintMad || priceBand.high,
+    });
+
+    // Audit log
+    await logAudit({
+      userId: buyerId,
+      action: AUDIT_ACTIONS.JOB_CREATE,
+      resourceType: 'job',
+      resourceId: job.id,
+      changes: { category, city, budgetHintMad: job.budgetHintMad },
+      req,
     });
 
     res.json(job);
@@ -189,12 +264,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(job);
   }));
 
-  app.post("/api/jobs/:id/cancel", asyncHandler(async (req, res) => {
-    const job = await storage.updateJob(req.params.id, { status: 'cancelled' });
+  app.post("/api/jobs/:id/cancel", requireAuth, asyncHandler(async (req, res) => {
+    const jobId = req.params.id;
+    const userId = req.session.userId!;
+
+    // Verify user owns this job
+    const job = await storage.getJob(jobId);
     if (!job) {
       return res.status(404).json({ error: "Job not found" });
     }
-    res.json(job);
+    if (job.buyerId !== userId) {
+      return res.status(403).json({ error: "Not authorized to cancel this job" });
+    }
+
+    const updatedJob = await storage.updateJob(jobId, { status: 'cancelled' });
+
+    // Audit log
+    await logAudit({
+      userId,
+      action: AUDIT_ACTIONS.JOB_CANCEL,
+      resourceType: 'job',
+      resourceId: jobId,
+      req,
+    });
+
+    res.json(updatedJob);
   }));
 
   // ===== OFFER ROUTES =====
@@ -213,16 +307,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(enrichedOffers);
   }));
 
-  app.post("/api/jobs/:id/offers", asyncHandler(async (req, res) => {
+  app.post("/api/jobs/:id/offers", requireAuth, requireRole('provider'), asyncHandler(async (req, res) => {
     const jobId = req.params.id;
-    const { providerId, priceMad, etaMin, notes } = req.body;
+    const { priceMad, etaMin, notes } = req.body;
+    
+    // Get provider ID from authenticated user
+    const userId = req.session.userId!;
+    const userProvider = await storage.getProviderByUserId(userId);
+    if (!userProvider) {
+      return res.status(400).json({ error: "Provider profile not found" });
+    }
+    const providerId = userProvider.id;
 
-    // Get job and provider for scoring
+    // Get job and provider details for scoring
     const job = await storage.getJob(jobId);
-    const provider = await storage.getProvider(providerId);
-
-    if (!job || !provider) {
-      return res.status(404).json({ error: "Job or provider not found" });
+    if (!job) {
+      return res.status(404).json({ error: "Job not found" });
     }
 
     // Calculate AI score
@@ -230,8 +330,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const priceBand = jobSpec.priceBand || { low: 0, high: 10000 };
     
     const compliance = calculateCompliance(
-      provider.permits as Record<string, boolean>,
-      provider.verified
+      userProvider.permits as Record<string, boolean>,
+      userProvider.verified
     );
     
     const fit = calculateFit(jobSpec, { capacity: 4, maxDistance: 500 }); // TODO: Get from provider profile
@@ -241,8 +341,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       eta: etaMin / 120, // Normalize to 0-1 (assuming max 120 min)
       price: priceMad,
       fair: priceBand,
-      rating: parseFloat(provider.rating || '0'),
-      reliability: provider.verified ? 0.9 : 0.5,
+      rating: parseFloat(userProvider.rating || '0'),
+      reliability: userProvider.verified ? 0.9 : 0.5,
       compliance,
       distance: 0.2, // TODO: Calculate actual distance
     });
@@ -258,17 +358,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
       expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
     });
 
+    // Audit log
+    await logAudit({
+      userId,
+      action: AUDIT_ACTIONS.OFFER_SUBMIT,
+      resourceType: 'offer',
+      resourceId: offer.id,
+      changes: { jobId, providerId, priceMad, aiScore },
+      req,
+    });
+
     res.json(offer);
   }));
 
-  app.post("/api/offers/:id/accept", asyncHandler(async (req, res) => {
+  app.post("/api/offers/:id/accept", requireAuth, requireRole('buyer'), asyncHandler(async (req, res) => {
     const offerId = req.params.id;
+    const userId = req.session.userId!;
     
-    // Update offer status
-    const offer = await storage.updateOffer(offerId, { status: 'accepted' });
+    // Get offer and verify user owns the job
+    const offer = await storage.getOffer(offerId);
     if (!offer) {
       return res.status(404).json({ error: "Offer not found" });
     }
+
+    const job = await storage.getJob(offer.jobId);
+    if (!job) {
+      return res.status(404).json({ error: "Job not found" });
+    }
+    
+    if (job.buyerId !== userId) {
+      return res.status(403).json({ error: "Not authorized to accept this offer" });
+    }
+
+    // Update offer status
+    const updatedOffer = await storage.updateOffer(offerId, { status: 'accepted' });
 
     // Update job status
     await storage.updateJob(offer.jobId, { status: 'accepted' });
@@ -281,7 +404,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .map(o => storage.updateOffer(o.id, { status: 'declined' }))
     );
 
-    res.json(offer);
+    // Audit log
+    await logAudit({
+      userId,
+      action: AUDIT_ACTIONS.OFFER_ACCEPT,
+      resourceType: 'offer',
+      resourceId: offerId,
+      changes: { jobId: offer.jobId, status: 'accepted' },
+      req,
+    });
+
+    res.json(updatedOffer);
   }));
 
   // ===== MESSAGE ROUTES =====
@@ -306,8 +439,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(message);
   }));
 
-  app.get("/api/messages/conversations", asyncHandler(async (req, res) => {
-    const userId = req.query.userId as string || 'demo-buyer';
+  app.get("/api/messages/conversations", requireAuth, asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
     
     // Get jobs for the user
     const jobsList = await storage.getJobsByBuyerId(userId);

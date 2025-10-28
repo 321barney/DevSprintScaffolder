@@ -3,9 +3,17 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
-import { pool } from "./storage";
+import { pool } from "./db";
 
 const app = express();
+
+// SECURITY: Enforce SESSION_SECRET in production
+if (process.env.NODE_ENV === 'production' && !process.env.SESSION_SECRET) {
+  throw new Error('SESSION_SECRET must be set in production');
+}
+
+// Trust proxy - required for secure cookies behind reverse proxy (Replit, Heroku, etc.)
+app.set('trust proxy', 1);
 
 // Session management with PostgreSQL store
 const PgStore = connectPgSimple(session);
