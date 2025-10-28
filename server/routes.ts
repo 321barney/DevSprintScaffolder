@@ -1,5 +1,7 @@
 import type { Express } from "express";
+import type { Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
+import bcrypt from "bcrypt";
 import { storage } from "./storage";
 import { calculatePriceBand, structureJobDescription } from "./ai/pricing";
 import { scoreOffer, calculateCompliance, calculateFit } from "./ai/scoring";
@@ -11,31 +13,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const asyncHandler = (fn: Function) => (req: any, res: any, next: any) =>
     Promise.resolve(fn(req, res, next)).catch(next);
 
+  // Auth middleware - protect routes that require authentication
+  const requireAuth = (req: Request, res: Response, next: NextFunction) => {
+    if (!req.session.userId) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    next();
+  };
+
+  // Role-based middleware
+  const requireRole = (...roles: Array<'buyer' | 'provider' | 'admin'>) => {
+    return (req: Request, res: Response, next: NextFunction) => {
+      if (!req.session.userId) {
+        return res.status(401).json({ error: "Authentication required" });
+      }
+      if (!roles.includes(req.session.role!)) {
+        return res.status(403).json({ error: "Insufficient permissions" });
+      }
+      next();
+    };
+  };
+
   // ===== AUTH ROUTES =====
-  // ⚠️ SECURITY WARNING: These auth endpoints use plaintext passwords for MVP demo purposes.
-  // ⚠️ PRODUCTION REQUIREMENTS:
-  // 1. Install bcrypt: npm install bcrypt @types/bcrypt
-  // 2. Hash passwords on signup: const hashedPassword = await bcrypt.hash(password, 10);
-  // 3. Verify on login: await bcrypt.compare(password, user.password)
-  // 4. Implement JWT or session-based authentication
-  // 5. Add HTTPS enforcement and rate limiting
-  
   app.post("/api/auth/signup", asyncHandler(async (req, res) => {
     const { email, password, role, locale } = req.body;
     
+    // Validate input
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password required" });
+    }
+    
+    if (password.length < 8) {
+      return res.status(400).json({ error: "Password must be at least 8 characters" });
+    }
+
     // Check if user exists
     const existing = await storage.getUserByEmail(email);
     if (existing) {
       return res.status(400).json({ error: "User already exists" });
     }
 
-    // ⚠️ TODO: Hash password with bcrypt before storing
+    // Hash password with bcrypt
+    const hashedPassword = await bcrypt.hash(password, 10);
+
     const user = await storage.createUser({
       email,
-      password, // UNSAFE: Storing plaintext for demo only
+      password: hashedPassword,
       role: role || 'buyer',
       locale: locale || 'fr-MA',
     });
+
+    // Set session
+    req.session.userId = user.id;
+    req.session.role = user.role;
+    req.session.email = user.email;
 
     res.json({ user: { ...user, password: undefined } });
   }));
@@ -43,12 +74,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/login", asyncHandler(async (req, res) => {
     const { email, password } = req.body;
     
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password required" });
+    }
+
     const user = await storage.getUserByEmail(email);
-    // ⚠️ TODO: Use bcrypt.compare() for password verification
-    if (!user || user.password !== password) {
+    if (!user) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
+    // Verify password with bcrypt
+    const isValid = await bcrypt.compare(password, user.password);
+    if (!isValid) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    // Set session
+    req.session.userId = user.id;
+    req.session.role = user.role;
+    req.session.email = user.email;
+
+    res.json({ user: { ...user, password: undefined } });
+  }));
+
+  app.post("/api/auth/logout", asyncHandler(async (req, res) => {
+    req.session.destroy((err) => {
+      if (err) {
+        return res.status(500).json({ error: "Logout failed" });
+      }
+      res.clearCookie('connect.sid');
+      res.json({ success: true });
+    });
+  }));
+
+  app.get("/api/auth/me", requireAuth, asyncHandler(async (req, res) => {
+    const user = await storage.getUser(req.session.userId!);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
     res.json({ user: { ...user, password: undefined } });
   }));
 

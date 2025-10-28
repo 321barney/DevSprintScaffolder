@@ -1,21 +1,25 @@
 // Seed data for SoukMatch marketplace
+import bcrypt from 'bcrypt';
 import { storage } from './storage';
 
 export async function seedDatabase() {
   console.log('Seeding database...');
 
   try {
+    // Hash password for all seed users
+    const hashedPassword = await bcrypt.hash('password123', 10);
+
     // Create buyers
     const buyer1 = await storage.createUser({
       email: 'ahmed@example.ma',
-      password: 'password123',
+      password: hashedPassword,
       role: 'buyer',
       locale: 'fr-MA',
     });
 
     const buyer2 = await storage.createUser({
       email: 'fatima@example.ma',
-      password: 'password123',
+      password: hashedPassword,
       role: 'buyer',
       locale: 'ar-MA',
     });
@@ -23,7 +27,7 @@ export async function seedDatabase() {
     // Create providers
     const provider1User = await storage.createUser({
       email: 'transport@casablanca.ma',
-      password: 'password123',
+      password: hashedPassword,
       role: 'provider',
       locale: 'fr-MA',
     });
@@ -40,7 +44,7 @@ export async function seedDatabase() {
 
     const provider2User = await storage.createUser({
       email: 'tours@marrakech.ma',
-      password: 'password123',
+      password: hashedPassword,
       role: 'provider',
       locale: 'fr-MA',
     });
@@ -57,7 +61,7 @@ export async function seedDatabase() {
 
     const provider3User = await storage.createUser({
       email: 'service@rabat.ma',
-      password: 'password123',
+      password: hashedPassword,
       role: 'provider',
       locale: 'ar-MA',
     });
