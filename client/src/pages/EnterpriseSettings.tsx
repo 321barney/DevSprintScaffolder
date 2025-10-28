@@ -63,7 +63,7 @@ export default function EnterpriseSettings() {
 
   const createHrisMutation = useMutation({
     mutationFn: async (data: any) => {
-      return apiRequest('/api/hris-sync-configs', 'POST', data);
+      return apiRequest('POST', '/api/hris-sync-configs', data);
     },
     onSuccess: () => {
       toast({
@@ -84,7 +84,7 @@ export default function EnterpriseSettings() {
 
   const updateHrisMutation = useMutation({
     mutationFn: async ({ id, data }: any) => {
-      return apiRequest(`/api/hris-sync-configs/${id}`, 'PATCH', data);
+      return apiRequest('PATCH', `/api/hris-sync-configs/${id}`, data);
     },
     onSuccess: () => {
       toast({
@@ -97,7 +97,7 @@ export default function EnterpriseSettings() {
 
   const createSsoMutation = useMutation({
     mutationFn: async (data: any) => {
-      return apiRequest('/api/sso-connections', 'POST', data);
+      return apiRequest('POST', '/api/sso-connections', data);
     },
     onSuccess: () => {
       toast({
@@ -118,7 +118,7 @@ export default function EnterpriseSettings() {
 
   const updateSsoMutation = useMutation({
     mutationFn: async ({ id, data }: any) => {
-      return apiRequest(`/api/sso-connections/${id}`, 'PATCH', data);
+      return apiRequest('PATCH', `/api/sso-connections/${id}`, data);
     },
     onSuccess: () => {
       toast({

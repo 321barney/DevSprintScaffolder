@@ -33,7 +33,7 @@ export default function Bleisure() {
 
   const bookingMutation = useMutation({
     mutationFn: async (data: any) => {
-      return apiRequest('/api/bleisure-bookings', 'POST', data);
+      return apiRequest('POST', '/api/bleisure-bookings', data);
     },
     onSuccess: () => {
       toast({
