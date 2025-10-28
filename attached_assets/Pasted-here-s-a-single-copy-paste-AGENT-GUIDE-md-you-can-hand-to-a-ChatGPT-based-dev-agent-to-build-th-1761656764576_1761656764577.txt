@@ -1,0 +1,454 @@
+here’s a single, copy-paste **AGENT_GUIDE.md** you can hand to a ChatGPT-based dev agent to build the full SoukMatch app from zero to MVP. it’s opinionated, step-by-step, and includes exact deliverables, tools, APIs, tests, and guardrails.
+
+---
+
+# SoukMatch Dev Agent — Execution Guide (AGENT_GUIDE.md)
+
+## 0) Mission & Boundaries
+
+**Mission:** Build a production-grade MVP for **SoukMatch**: a Morocco-first bid/offer marketplace where buyers post jobs (transport, tours, B2B services) and providers bid; buyers accept; AI assists with structuring requests, price guidance, offer scoring, basic contracts, and KYC/compliance. Include a **broker flow for car loans/leases** (lead + doc pack to lenders; no credit decisions).
+
+**Non-Goals (MVP):** full escrow, dispute arbitration, advanced route ETAs, deep lender APIs, tours inventory, complex crowd models.
+
+**Languages:** FR/AR baseline; EN/ES optional. **Currency:** MAD. **Time zone:** Africa/Casablanca.
+
+---
+
+## 1) Architecture (monorepo)
+
+Create a mono-repo using Turborepo.
+
+```
+soukmatch/
+  apps/
+    api/            # NestJS + Prisma + Postgres + WebSockets
+    mobile/         # Flutter (Buyer & Provider modes)
+    worker/         # Node TS (BullMQ for async jobs)
+  packages/
+    shared/         # TS types, OpenAPI client generator
+    ai/             # Prompt templates & guardrails
+  infra/
+    docker/         # docker-compose.dev.yml (Postgres, Redis)
+  .github/workflows/ci.yml
+  turbo.json
+  package.json
+  README.md
+  AGENT_GUIDE.md
+  .env.example
+```
+
+**Infra:** Docker (Postgres, Redis), GitHub Actions (CI), Fly.io/Render (staging), Supabase Auth or JWT.
+**Maps:** Mapbox/Google via env toggle.
+**Notifications:** Firebase (push), optional WhatsApp (360dialog/Twilio).
+
+---
+
+## 2) Security, Compliance, Privacy (hard rules)
+
+* Never commit secrets. Provide `.env.example` files.
+* PII masking in logs; rotate tokens; rate-limit auth and write endpoints.
+* **KYC & permits required** before a provider can bid (transport: VTC/tourism permit + insurance).
+* Financing = **broker**: collect consent, KYC/AML checklists; no lending decisions.
+* Arabic content must render RTL correctly; store all text as UTF-8.
+
+---
+
+## 3) Tools the Agent May Call (function-calling schema)
+
+Provide these tools to the agent (wire them to GitHub/Linear/Render or equivalents).
+
+```json
+{"name":"git_create_repo","description":"Create monorepo","parameters":{"type":"object","properties":{"name":{"type":"string"},"private":{"type":"boolean"}},"required":["name"]}}
+{"name":"git_write_path","description":"Write/overwrite a file","parameters":{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"},"branch":{"type":"string"}},"required":["path","content"]}}
+{"name":"git_open_pr","description":"Open a PR","parameters":{"type":"object","properties":{"branch":{"type":"string"},"title":{"type":"string"},"body":{"type":"string"}},"required":["branch","title"]}}
+{"name":"pm_create_issue","description":"Create a task","parameters":{"type":"object","properties":{"title":{"type":"string"},"body":{"type":"string"},"labels":{"type":"array","items":{"type":"string"}}}}}
+{"name":"ci_run_pipeline","description":"Run CI","parameters":{"type":"object","properties":{"env":{"type":"string"}},"required":["env"]}}
+{"name":"deploy_service","description":"Deploy service","parameters":{"type":"object","properties":{"service":{"type":"string"},"env":{"type":"string"}},"required":["service","env"]}}
+{"name":"kb_add_doc","description":"Save docs to knowledge base","parameters":{"type":"object","properties":{"title":{"type":"string"},"content_md":{"type":"string"}},"required":["title","content_md"]}}
+```
+
+---
+
+## 4) Definition of Done (DoD) — MVP
+
+* **API**: Auth, Jobs, Offers, Accept, Messaging, Ratings, Provider KYC, Financing pre-qual.
+* **AI services**: job structuring, price band guidance, offer scoring, contract draft (FR/AR).
+* **Mobile app**: Post Job, Live Offers stream, Accept Offer, Chat, Profile/KYC upload, Provider switch, Arabic/RTL support.
+* **Worker**: async scoring, notifications, doc OCR.
+* **DB**: Postgres schema + migrations + seeds.
+* **CI**: lint, typecheck, tests, build, DB migration check.
+* **Docs**: README, API reference (OpenAPI), environment setup, runbook.
+
+---
+
+## 5) Data Model (Prisma or TypeORM)
+
+Implement as Prisma schema under `apps/api/prisma/schema.prisma` (or SQL migrations if TypeORM). Minimum:
+
+```prisma
+model AppUser {
+  id        String   @id @default(uuid())
+  role      String   // buyer | provider | admin
+  email     String?  @unique
+  phone     String?
+  locale    String   @default("fr-MA")
+  createdAt DateTime @default(now())
+  Provider  Provider?
+}
+
+model Provider {
+  id         String  @id @default(uuid())
+  userId     String  @unique
+  displayName String
+  city       String?
+  rating     Float   @default(0)
+  permits    Json    @default("{}")
+  verified   Boolean @default(false)
+  AppUser    AppUser @relation(fields: [userId], references: [id])
+}
+
+model Job {
+  id        String   @id @default(uuid())
+  buyerId   String
+  category  String   // transport | tour | service | financing
+  city      String?
+  spec      Json
+  budgetMAD Int?
+  status    String   @default("open")
+  createdAt DateTime @default(now())
+  offers    Offer[]
+}
+
+model Offer {
+  id        String   @id @default(uuid())
+  jobId     String
+  providerId String
+  priceMAD  Int?
+  etaMin    Int?
+  notes     String?
+  aiScore   Float?
+  compliance Json?
+  status    String   @default("pending") // pending | accepted | declined
+  expiresAt DateTime?
+  createdAt DateTime @default(now())
+  Job       Job      @relation(fields: [jobId], references: [id])
+  Provider  Provider @relation(fields: [providerId], references: [id])
+}
+
+model FinancingOffer {
+  id           String  @id @default(uuid())
+  jobId        String
+  lenderCode   String
+  type         String  // loan | lease
+  apr          Float?
+  termMonths   Int?
+  downPaymentMAD Int?
+  monthlyMAD   Int?
+  conditions   Json?
+  prequal      Boolean @default(true)
+  Job          Job     @relation(fields: [jobId], references: [id])
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  jobId     String
+  senderId  String
+  body      String
+  meta      Json?
+  createdAt DateTime @default(now())
+}
+
+model Rating {
+  id        String   @id @default(uuid())
+  jobId     String
+  raterId   String
+  rateeId   String
+  score     Int
+  tags      String[]
+  createdAt DateTime @default(now())
+}
+```
+
+---
+
+## 6) API Contracts (OpenAPI-first)
+
+Generate OpenAPI v3 in `apps/api/openapi.yaml`. Minimum endpoints:
+
+**Auth**
+
+* `POST /auth/signup`, `POST /auth/login`, `GET /me`
+
+**Providers & KYC**
+
+* `POST /providers` (create/submit KYC), `GET /providers/{id}`, `POST /providers/{id}/verify` (admin)
+
+**Jobs**
+
+* `POST /jobs` (free-text accepted)
+* `GET /jobs/{id}`, `POST /jobs/{id}/cancel`
+
+**Offers**
+
+* `POST /jobs/{id}/offers` (provider bid)
+* `GET /jobs/{id}/offers` (buyer view)
+* `POST /offers/{id}/accept`
+* `WS /offers/stream?jobId=...` (live offers)
+
+**Financing**
+
+* `POST /financing/prequal` (collect docs + soft analysis)
+* `GET /financing/{jobId}/offers`
+* `POST /financing/{jobId}/submit` (route to lenders)
+
+**AI (internal)**
+
+* `POST /ai/structure-job`
+* `POST /ai/price-band`
+* `POST /ai/score-offer`
+* `POST /ai/contract-draft`
+
+**Example schemas** (put in OpenAPI file):
+
+```yaml
+components:
+  schemas:
+    JobCreate:
+      type: object
+      required: [category, city]
+      properties:
+        category: {type: string, enum: [transport, tour, service, financing]}
+        city: {type: string}
+        text: {type: string, description: "Free text the AI will structure"}
+        spec: {type: object, description: "Optional structured payload"}
+    Offer:
+      type: object
+      properties:
+        id: {type: string}
+        priceMAD: {type: integer}
+        etaMin: {type: integer}
+        aiScore: {type: number}
+        compliance: {type: object}
+```
+
+---
+
+## 7) AI Modules (packages/ai)
+
+Create **pure functions** with tests; call OpenAI where needed.
+
+* `structureJob(text: string, city: string, category: 'transport'|'tour'|'service'|'financing'): Spec`
+* `priceBand(input: {city:string; category:string; km?:number; pax?:number; timeISO:string}): {low:number; high:number}`
+* `scoreOffer(input: {fit:number; eta:number; price:number; fair:{low:number;high:number}; rating:number; reliability:number; compliance:number; distance:number}): number`
+* `draftContract(input: {category:string; lang:'fr'|'ar'; terms:object}): string` (returns Markdown/HTML)
+
+**Guardrails:** always return JSON per schema; never produce external links; keep FR/AR phrasing formal; redact PII in logs.
+
+---
+
+## 8) Mobile App (Flutter)
+
+**Minimum screens:**
+
+* Auth (email OTP or password)
+* **Buyer**: Post Job (free text), Job Detail (offer list with score), Accept Offer, Chat
+* **Provider**: My Jobs to Bid, Offer Composer (with **Auto-Bid**), KYC Upload, Profile
+* Settings: Language toggle (FR/AR), currency format MAD
+
+**State:** BLoC/Provider.
+**Networking:** OpenAPI-generated client or Retrofit-like wrapper.
+**RTL:** enable `Directionality` for Arabic; test LTR/RTL.
+
+---
+
+## 9) Matching & Pricing (server modules)
+
+Implement initial heuristics; make weights configurable per category.
+
+```ts
+// priceBand.ts (heuristic bootstrap)
+export function priceBand(input:{city:string; category:'transport'|'tour'|'service'; km?:number; pax?:number; timeISO:string}) {
+  const base = input.category==='transport' ? 8 : 20; // MAD per km/unit
+  const hour = new Date(input.timeISO).getHours();
+  const surge = (hour >= 22 || hour < 6) ? 1.15 : 1.0;
+  const km = input.km ?? 10;
+  return { low: Math.round(base*km*0.85*surge), high: Math.round(base*km*1.15*surge) };
+}
+```
+
+```ts
+// scoreOffer.ts
+export function scoreOffer(p:{fit:number; eta:number; price:number; fair:{low:number;high:number}; rating:number; reliability:number; compliance:number; distance:number}) {
+  const priceNorm = p.price < p.fair.low ? 0.7 : p.price > p.fair.high ? 0.6 : 1.0;
+  const score = 0.25*p.fit + 0.20*(1-p.eta) + 0.20*priceNorm + 0.15*p.reliability + 0.10*p.rating + 0.07*p.compliance + 0.03*(1-p.distance);
+  return Number(score.toFixed(3));
+}
+```
+
+---
+
+## 10) CI/CD & Quality Gates
+
+* GitHub Actions: install, lint, build, test, DB migrate check, OpenAPI validate, Flutter build (debug).
+* Block merges if: tests < **70%** on `packages/ai` + API services; lint errors; OpenAPI diff not updated.
+* Auto-publish OpenAPI client to `packages/shared` on change.
+* Staging deploy after main branch green.
+
+---
+
+## 11) Templates to Generate
+
+**Issue template** `.github/ISSUE_TEMPLATE/feature.md`
+
+```md
+### Summary
+### Acceptance Criteria
+- [ ] ...
+### Tests
+- [ ] Unit
+- [ ] Integration
+```
+
+**PR template** `.github/pull_request_template.md`
+
+```md
+## What
+## Why
+## Screenshots
+## Tests
+- [ ] Unit
+- [ ] Integration
+- [ ] Manual QA
+## Checklist
+- [ ] OpenAPI updated
+- [ ] Migrations added & tested
+- [ ] i18n strings (FR/AR)
+```
+
+**ADR template** `docs/adr/000-template.md`
+
+```md
+# Title
+## Context
+## Decision
+## Consequences
+```
+
+---
+
+## 12) Seed Data (for local dev)
+
+* 10 buyers, 15 providers (Casablanca/Marrakech), 20 jobs (transport/tour), 30 offers.
+* 2 lenders (`"BANKA"`, `"LEASECO"`) with mock financing offers.
+
+---
+
+## 13) Test Plan (must implement)
+
+**Unit:** AI functions, controllers/services, validators.
+**Integration:**
+
+* Create job → offers flow (≥3 offers in < 60s via fixtures)
+* Accept offer → payment pre-auth (sandbox)
+* Provider KYC upload → admin verify gate
+* Financing pre-qual → surfaces ≥1 pre-qualified offer
+  **E2E (light):** Flutter driver test posts a job and accepts an offer on staging.
+
+**Gherkin examples** (place in `tests/acceptance/*.feature`)
+
+```gherkin
+Feature: Accepting an offer
+  Scenario: Buyer accepts the best-scored offer
+    Given a transport job is open in Marrakech
+    And at least 3 providers have bid
+    When the buyer accepts the top-scored offer
+    Then the job status becomes "accepted"
+    And the provider receives a notification
+```
+
+---
+
+## 14) Sprint Plan (12 weeks)
+
+**W1–2 Foundations:** monorepo, CI, DB, auth, i18n, KYC upload + admin review.
+**W3 Matching:** post job (free text), AI structure, price bands, offer model, WS offers stream.
+**W4 Accept & Payments:** accept flow, cancel/no-show policy, sandbox payments, receipts.
+**W5 Provider App:** bid composer + **Auto-Bid**, win-rate analytics.
+**W6 Chat & Ratings:** in-job chat, post-completion ratings.
+**W7 Financing Pilot:** pre-qual form, doc pack, lender mock offers & routing.
+**W8 Contracts:** FR/AR contract draft for B2B transport (PO + SLA).
+**W9 Hardening:** rate limits, input validation, logs/metrics, error budgets.
+**W10 Mobile Polish:** RTL, offline toasts, loading states, QA matrix.
+**W11 Staging Launch:** seed data, smoke E2E, performance pass (p95 < 300ms for main endpoints).
+**W12 Beta:** provider onboarding script, basic analytics, release notes.
+
+Each week ends with: **demo build**, **DoD checklist**, **release notes** in `/docs/releases/Wx.md`.
+
+---
+
+## 15) Observability
+
+* Request/response logs (no PII), correlation IDs.
+* Metrics: requests, error rate, p95 latency, offers per job, time-to-first-offer.
+* Alerts: 5xx burst, queue backlog, SMS/email provider failures.
+
+---
+
+## 16) i18n & UX Copy
+
+* Store strings in JSON (`fr`, `ar`, `en`).
+* Minimum copy to include: Post Job prompt, offer cards, accept confirmation, cancel policy, KYC checklist, financing consent.
+
+---
+
+## 17) Admin Console (basic)
+
+* Review/approve provider KYC & permits.
+* Search jobs/offers; force-cancel with reason.
+* Export logs (CSV) for audits.
+* Toggle feature flags (financing, escrow placeholder).
+
+---
+
+## 18) Rollout Checklist
+
+* Security review (authZ on every route; providers can only see their own offers).
+* Legal review (terms, privacy, broker disclosure).
+* Staging smoke tests passing; seed script executed.
+* Support email & in-app report button active.
+* Backups enabled for Postgres; restore test performed.
+
+---
+
+## 19) Agent Operating Loop (every work session)
+
+1. **Sync backlog** (`pm_create_issue` for next tasks).
+2. **Implement** in a short branch; write tests; update OpenAPI.
+3. **Docs** (`kb_add_doc` with what changed).
+4. **PR** (`git_open_pr`) with screenshots and test notes.
+5. **CI** (`ci_run_pipeline`); fix until green.
+6. **Deploy** staging (`deploy_service`).
+7. **Post** release notes and next steps.
+
+---
+
+## 20) Example Prompts the Agent Should Use Internally
+
+* **Job structuring (FR/AR):** “Convert this free text to a JSON spec: category, city, pickup/dropoff, pax, time (ISO), special reqs. Return only JSON.”
+* **Contract draft:** “Draft a bilingual (FR/AR) mini-contract for B2B transport including SLA windows, penalties, payment terms under Moroccan law. Return Markdown.”
+* **Offer scoring rationale:** “Given fair price range and offer list, compute scores and return top 5 with a one-line explanation each.”
+
+---
+
+## 21) Acceptance Criteria (MVP sign-off)
+
+* Buyer can post a **transport** job via free text, receive ≥3 offers, accept one, and complete payment **in staging**.
+* Provider cannot bid until KYC+permits are **verified**.
+* AI returns sensible **price bands** in MAD and **scores** offers; rationale shown in API.
+* Financing pre-qual surfaces at least one **mock** offer, collecting docs with consent.
+* Mobile app works **LTR & RTL**; Arabic renders correctly; MAD prices format properly.
+* CI green; core modules ≥70% test coverage; OpenAPI published; README accurate.
+
+---
+
+> hand this file to your AI agent as the **single source of truth**. if the agent needs to choose between options, it must: (1) open an ADR, (2) pick the simplest option that meets the DoD, (3) proceed with small PRs, tested and documented.
