@@ -1,6 +1,7 @@
 // Storage interface and implementation using javascript_database blueprint
 import {
   users, providers, jobs, offers, financingOffers, messages, ratings,
+  platformFees, providerSubscriptions, transactions, providerEarnings,
   type User, type InsertUser,
   type Provider, type InsertProvider,
   type Job, type InsertJob,
@@ -8,6 +9,10 @@ import {
   type FinancingOffer, type InsertFinancingOffer,
   type Message, type InsertMessage,
   type Rating, type InsertRating,
+  type PlatformFee, type InsertPlatformFee,
+  type ProviderSubscription, type InsertProviderSubscription,
+  type Transaction, type InsertTransaction,
+  type ProviderEarning, type InsertProviderEarning,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc } from "drizzle-orm";
@@ -51,6 +56,25 @@ export interface IStorage {
   getRatingsByJobId(jobId: string): Promise<Rating[]>;
   getRatingsByRateeId(rateeId: string): Promise<Rating[]>;
   createRating(rating: InsertRating): Promise<Rating>;
+
+  // Phase 1: Platform Fees
+  createPlatformFee(fee: InsertPlatformFee): Promise<PlatformFee>;
+  getPlatformFeeByOfferId(offerId: string): Promise<PlatformFee | undefined>;
+
+  // Phase 1: Provider Subscriptions
+  getProviderSubscription(providerId: string): Promise<ProviderSubscription | undefined>;
+  createProviderSubscription(sub: InsertProviderSubscription): Promise<ProviderSubscription>;
+  updateProviderSubscription(providerId: string, data: Partial<ProviderSubscription>): Promise<ProviderSubscription | undefined>;
+
+  // Phase 1: Transactions
+  getTransaction(id: string): Promise<Transaction | undefined>;
+  getTransactionsByProviderId(providerId: string): Promise<Transaction[]>;
+  createTransaction(tx: InsertTransaction): Promise<Transaction>;
+  updateTransaction(id: string, data: Partial<Transaction>): Promise<Transaction | undefined>;
+
+  // Phase 1: Provider Earnings
+  createProviderEarning(earning: InsertProviderEarning): Promise<ProviderEarning>;
+  getProviderEarningsByProviderId(providerId: string): Promise<ProviderEarning[]>;
 }
 
 // Database storage implementation
@@ -235,6 +259,106 @@ export class DatabaseStorage implements IStorage {
       .values(insertRating)
       .returning();
     return rating;
+  }
+
+  // Phase 1: Platform Fees
+  async createPlatformFee(insertFee: InsertPlatformFee): Promise<PlatformFee> {
+    const [fee] = await db
+      .insert(platformFees)
+      .values(insertFee)
+      .returning();
+    return fee;
+  }
+
+  async getPlatformFeeByOfferId(offerId: string): Promise<PlatformFee | undefined> {
+    const [fee] = await db
+      .select()
+      .from(platformFees)
+      .where(eq(platformFees.offerId, offerId));
+    return fee || undefined;
+  }
+
+  // Phase 1: Provider Subscriptions
+  async getProviderSubscription(providerId: string): Promise<ProviderSubscription | undefined> {
+    const [subscription] = await db
+      .select()
+      .from(providerSubscriptions)
+      .where(eq(providerSubscriptions.providerId, providerId));
+    return subscription || undefined;
+  }
+
+  async createProviderSubscription(insertSub: InsertProviderSubscription): Promise<ProviderSubscription> {
+    const [subscription] = await db
+      .insert(providerSubscriptions)
+      .values(insertSub as any)
+      .returning();
+    return subscription;
+  }
+
+  async updateProviderSubscription(
+    providerId: string, 
+    data: Partial<ProviderSubscription>
+  ): Promise<ProviderSubscription | undefined> {
+    const [subscription] = await db
+      .update(providerSubscriptions)
+      .set(data)
+      .where(eq(providerSubscriptions.providerId, providerId))
+      .returning();
+    return subscription || undefined;
+  }
+
+  // Phase 1: Transactions
+  async getTransaction(id: string): Promise<Transaction | undefined> {
+    const [transaction] = await db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.id, id));
+    return transaction || undefined;
+  }
+
+  async getTransactionsByProviderId(providerId: string): Promise<Transaction[]> {
+    return await db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.providerId, providerId))
+      .orderBy(desc(transactions.createdAt));
+  }
+
+  async createTransaction(insertTx: InsertTransaction): Promise<Transaction> {
+    const [transaction] = await db
+      .insert(transactions)
+      .values(insertTx as any)
+      .returning();
+    return transaction;
+  }
+
+  async updateTransaction(
+    id: string, 
+    data: Partial<Transaction>
+  ): Promise<Transaction | undefined> {
+    const [transaction] = await db
+      .update(transactions)
+      .set(data)
+      .where(eq(transactions.id, id))
+      .returning();
+    return transaction || undefined;
+  }
+
+  // Phase 1: Provider Earnings
+  async createProviderEarning(insertEarning: InsertProviderEarning): Promise<ProviderEarning> {
+    const [earning] = await db
+      .insert(providerEarnings)
+      .values(insertEarning)
+      .returning();
+    return earning;
+  }
+
+  async getProviderEarningsByProviderId(providerId: string): Promise<ProviderEarning[]> {
+    return await db
+      .select()
+      .from(providerEarnings)
+      .where(eq(providerEarnings.providerId, providerId))
+      .orderBy(desc(providerEarnings.createdAt));
   }
 }
 
