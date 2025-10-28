@@ -23,7 +23,7 @@ const dateLocales = {
 export default function JobDetail() {
   const { id } = useParams();
   const [, setLocation] = useLocation();
-  const { locale } = useApp();
+  const { locale, currentUser } = useApp();
   const { t } = useTranslation(locale);
   const { toast } = useToast();
 
@@ -36,6 +36,22 @@ export default function JobDetail() {
     queryKey: ['/api/jobs', id, 'offers'],
     enabled: !!id,
   });
+
+  const handleAcceptOffer = (offerId: string) => {
+    // Check if user is authenticated
+    if (!currentUser) {
+      toast({
+        variant: 'destructive',
+        title: t('auth.required'),
+        description: t('auth.required.message'),
+      });
+      setLocation('/login');
+      return;
+    }
+    
+    // Proceed with accepting the offer
+    acceptMutation.mutate(offerId);
+  };
 
   const acceptMutation = useMutation({
     mutationFn: (offerId: string) => apiRequest('POST', `/api/offers/${offerId}/accept`, {}),
@@ -202,7 +218,7 @@ export default function JobDetail() {
                   <OfferCard
                     key={offer.id}
                     offer={offer}
-                    onAccept={(offerId) => acceptMutation.mutate(offerId)}
+                    onAccept={handleAcceptOffer}
                     showActions={job.status === 'open'}
                   />
                 ))}
