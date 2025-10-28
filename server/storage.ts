@@ -5,6 +5,8 @@ import {
   providerProfiles, vehicles, providerDocuments, trips, tripTracks,
   companies, costCenters, travelerProfiles, venues, venueRooms, rfps, quotes, groupBookings, approvals,
   partnerTiers, corporateRates, milestonePayments, eventReports, itineraries, disruptionAlerts, dmcPartners,
+  notificationPreferences, notificationHistory, virtualCards, expenseEntries, sustainabilityMetrics,
+  qualityAudits, postEventNps, famTrips, famTripRegistrations,
   type User, type InsertUser,
   type Provider, type InsertProvider,
   type Job, type InsertJob,
@@ -37,6 +39,15 @@ import {
   type Itinerary, type InsertItinerary,
   type DisruptionAlert, type InsertDisruptionAlert,
   type DmcPartner, type InsertDmcPartner,
+  type NotificationPreference, type InsertNotificationPreference,
+  type NotificationHistory, type InsertNotificationHistory,
+  type VirtualCard, type InsertVirtualCard,
+  type ExpenseEntry, type InsertExpenseEntry,
+  type SustainabilityMetric, type InsertSustainabilityMetric,
+  type QualityAudit, type InsertQualityAudit,
+  type PostEventNps, type InsertPostEventNps,
+  type FamTrip, type InsertFamTrip,
+  type FamTripRegistration, type InsertFamTripRegistration,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc } from "drizzle-orm";
@@ -237,6 +248,53 @@ export interface IStorage {
   getVerifiedDmcPartners(): Promise<DmcPartner[]>;
   createDmcPartner(partner: InsertDmcPartner): Promise<DmcPartner>;
   updateDmcPartner(id: string, data: Partial<DmcPartner>): Promise<DmcPartner | undefined>;
+
+  // Phase 5: Notification Management
+  getNotificationPreference(id: string): Promise<NotificationPreference | undefined>;
+  getNotificationPreferencesByCompanyId(companyId: string): Promise<NotificationPreference[]>;
+  getNotificationPreferencesByUserId(userId: string): Promise<NotificationPreference[]>;
+  createNotificationPreference(pref: InsertNotificationPreference): Promise<NotificationPreference>;
+  updateNotificationPreference(id: string, data: Partial<NotificationPreference>): Promise<NotificationPreference | undefined>;
+  createNotificationHistory(history: InsertNotificationHistory): Promise<NotificationHistory>;
+  getNotificationHistoryByRecipientId(recipientId: string): Promise<NotificationHistory[]>;
+
+  // Phase 5: Virtual Cards & Expenses
+  getVirtualCard(id: string): Promise<VirtualCard | undefined>;
+  getVirtualCardsByCompanyId(companyId: string): Promise<VirtualCard[]>;
+  getVirtualCardsByCostCenterId(costCenterId: string): Promise<VirtualCard[]>;
+  createVirtualCard(card: InsertVirtualCard): Promise<VirtualCard>;
+  updateVirtualCard(id: string, data: Partial<VirtualCard>): Promise<VirtualCard | undefined>;
+  getExpenseEntry(id: string): Promise<ExpenseEntry | undefined>;
+  getExpenseEntriesByCompanyId(companyId: string): Promise<ExpenseEntry[]>;
+  getExpenseEntriesByGroupBookingId(groupBookingId: string): Promise<ExpenseEntry[]>;
+  createExpenseEntry(entry: InsertExpenseEntry): Promise<ExpenseEntry>;
+  updateExpenseEntry(id: string, data: Partial<ExpenseEntry>): Promise<ExpenseEntry | undefined>;
+
+  // Phase 5: Sustainability
+  getSustainabilityMetric(id: string): Promise<SustainabilityMetric | undefined>;
+  getSustainabilityMetricsByGroupBookingId(groupBookingId: string): Promise<SustainabilityMetric[]>;
+  createSustainabilityMetric(metric: InsertSustainabilityMetric): Promise<SustainabilityMetric>;
+
+  // Phase 5: Quality Assurance
+  getQualityAudit(id: string): Promise<QualityAudit | undefined>;
+  getQualityAuditsByVenueId(venueId: string): Promise<QualityAudit[]>;
+  getQualityAuditsByProviderId(providerId: string): Promise<QualityAudit[]>;
+  createQualityAudit(audit: InsertQualityAudit): Promise<QualityAudit>;
+  getPostEventNpsByGroupBookingId(groupBookingId: string): Promise<PostEventNps[]>;
+  createPostEventNps(nps: InsertPostEventNps): Promise<PostEventNps>;
+
+  // Phase 5: FAM Trips & Showcases
+  getFamTrip(id: string): Promise<FamTrip | undefined>;
+  getFamTripsByCity(city: string): Promise<FamTrip[]>;
+  getFamTripsByOrganizerId(organizerId: string): Promise<FamTrip[]>;
+  getOpenFamTrips(): Promise<FamTrip[]>;
+  createFamTrip(trip: InsertFamTrip): Promise<FamTrip>;
+  updateFamTrip(id: string, data: Partial<FamTrip>): Promise<FamTrip | undefined>;
+  getFamTripRegistration(id: string): Promise<FamTripRegistration | undefined>;
+  getFamTripRegistrationsByFamTripId(famTripId: string): Promise<FamTripRegistration[]>;
+  getFamTripRegistrationsByUserId(userId: string): Promise<FamTripRegistration[]>;
+  createFamTripRegistration(registration: InsertFamTripRegistration): Promise<FamTripRegistration>;
+  updateFamTripRegistration(id: string, data: Partial<FamTripRegistration>): Promise<FamTripRegistration | undefined>;
 }
 
 // Database storage implementation
@@ -1089,6 +1147,180 @@ export class DatabaseStorage implements IStorage {
   async updateDmcPartner(id: string, data: Partial<DmcPartner>): Promise<DmcPartner | undefined> {
     const [partner] = await db.update(dmcPartners).set(data as any).where(eq(dmcPartners.id, id)).returning();
     return partner || undefined;
+  }
+
+  // Notification Management
+  async getNotificationPreference(id: string): Promise<NotificationPreference | undefined> {
+    const [pref] = await db.select().from(notificationPreferences).where(eq(notificationPreferences.id, id));
+    return pref || undefined;
+  }
+
+  async getNotificationPreferencesByCompanyId(companyId: string): Promise<NotificationPreference[]> {
+    return await db.select().from(notificationPreferences).where(eq(notificationPreferences.companyId, companyId)).orderBy(desc(notificationPreferences.createdAt));
+  }
+
+  async getNotificationPreferencesByUserId(userId: string): Promise<NotificationPreference[]> {
+    return await db.select().from(notificationPreferences).where(eq(notificationPreferences.userId, userId)).orderBy(desc(notificationPreferences.createdAt));
+  }
+
+  async createNotificationPreference(insertPref: InsertNotificationPreference): Promise<NotificationPreference> {
+    const [pref] = await db.insert(notificationPreferences).values(insertPref as any).returning();
+    return pref;
+  }
+
+  async updateNotificationPreference(id: string, data: Partial<NotificationPreference>): Promise<NotificationPreference | undefined> {
+    const [pref] = await db.update(notificationPreferences).set(data as any).where(eq(notificationPreferences.id, id)).returning();
+    return pref || undefined;
+  }
+
+  async createNotificationHistory(insertHistory: InsertNotificationHistory): Promise<NotificationHistory> {
+    const [history] = await db.insert(notificationHistory).values(insertHistory as any).returning();
+    return history;
+  }
+
+  async getNotificationHistoryByRecipientId(recipientId: string): Promise<NotificationHistory[]> {
+    return await db.select().from(notificationHistory).where(eq(notificationHistory.recipientId, recipientId)).orderBy(desc(notificationHistory.sentAt));
+  }
+
+  // Virtual Cards & Expenses
+  async getVirtualCard(id: string): Promise<VirtualCard | undefined> {
+    const [card] = await db.select().from(virtualCards).where(eq(virtualCards.id, id));
+    return card || undefined;
+  }
+
+  async getVirtualCardsByCompanyId(companyId: string): Promise<VirtualCard[]> {
+    return await db.select().from(virtualCards).where(eq(virtualCards.companyId, companyId)).orderBy(desc(virtualCards.createdAt));
+  }
+
+  async getVirtualCardsByCostCenterId(costCenterId: string): Promise<VirtualCard[]> {
+    return await db.select().from(virtualCards).where(eq(virtualCards.costCenterId, costCenterId)).orderBy(desc(virtualCards.createdAt));
+  }
+
+  async createVirtualCard(insertCard: InsertVirtualCard): Promise<VirtualCard> {
+    const [card] = await db.insert(virtualCards).values(insertCard as any).returning();
+    return card;
+  }
+
+  async updateVirtualCard(id: string, data: Partial<VirtualCard>): Promise<VirtualCard | undefined> {
+    const [card] = await db.update(virtualCards).set(data as any).where(eq(virtualCards.id, id)).returning();
+    return card || undefined;
+  }
+
+  async getExpenseEntry(id: string): Promise<ExpenseEntry | undefined> {
+    const [entry] = await db.select().from(expenseEntries).where(eq(expenseEntries.id, id));
+    return entry || undefined;
+  }
+
+  async getExpenseEntriesByCompanyId(companyId: string): Promise<ExpenseEntry[]> {
+    return await db.select().from(expenseEntries).where(eq(expenseEntries.companyId, companyId)).orderBy(desc(expenseEntries.createdAt));
+  }
+
+  async getExpenseEntriesByGroupBookingId(groupBookingId: string): Promise<ExpenseEntry[]> {
+    return await db.select().from(expenseEntries).where(eq(expenseEntries.groupBookingId, groupBookingId)).orderBy(desc(expenseEntries.createdAt));
+  }
+
+  async createExpenseEntry(insertEntry: InsertExpenseEntry): Promise<ExpenseEntry> {
+    const [entry] = await db.insert(expenseEntries).values(insertEntry as any).returning();
+    return entry;
+  }
+
+  async updateExpenseEntry(id: string, data: Partial<ExpenseEntry>): Promise<ExpenseEntry | undefined> {
+    const [entry] = await db.update(expenseEntries).set(data as any).where(eq(expenseEntries.id, id)).returning();
+    return entry || undefined;
+  }
+
+  // Sustainability
+  async getSustainabilityMetric(id: string): Promise<SustainabilityMetric | undefined> {
+    const [metric] = await db.select().from(sustainabilityMetrics).where(eq(sustainabilityMetrics.id, id));
+    return metric || undefined;
+  }
+
+  async getSustainabilityMetricsByGroupBookingId(groupBookingId: string): Promise<SustainabilityMetric[]> {
+    return await db.select().from(sustainabilityMetrics).where(eq(sustainabilityMetrics.groupBookingId, groupBookingId)).orderBy(desc(sustainabilityMetrics.createdAt));
+  }
+
+  async createSustainabilityMetric(insertMetric: InsertSustainabilityMetric): Promise<SustainabilityMetric> {
+    const [metric] = await db.insert(sustainabilityMetrics).values(insertMetric as any).returning();
+    return metric;
+  }
+
+  // Quality Assurance
+  async getQualityAudit(id: string): Promise<QualityAudit | undefined> {
+    const [audit] = await db.select().from(qualityAudits).where(eq(qualityAudits.id, id));
+    return audit || undefined;
+  }
+
+  async getQualityAuditsByVenueId(venueId: string): Promise<QualityAudit[]> {
+    return await db.select().from(qualityAudits).where(eq(qualityAudits.venueId, venueId)).orderBy(desc(qualityAudits.visitDate));
+  }
+
+  async getQualityAuditsByProviderId(providerId: string): Promise<QualityAudit[]> {
+    return await db.select().from(qualityAudits).where(eq(qualityAudits.providerId, providerId)).orderBy(desc(qualityAudits.visitDate));
+  }
+
+  async createQualityAudit(insertAudit: InsertQualityAudit): Promise<QualityAudit> {
+    const [audit] = await db.insert(qualityAudits).values(insertAudit as any).returning();
+    return audit;
+  }
+
+  async getPostEventNpsByGroupBookingId(groupBookingId: string): Promise<PostEventNps[]> {
+    return await db.select().from(postEventNps).where(eq(postEventNps.groupBookingId, groupBookingId)).orderBy(desc(postEventNps.responseDate));
+  }
+
+  async createPostEventNps(insertNps: InsertPostEventNps): Promise<PostEventNps> {
+    const [nps] = await db.insert(postEventNps).values(insertNps as any).returning();
+    return nps;
+  }
+
+  // FAM Trips & Showcases
+  async getFamTrip(id: string): Promise<FamTrip | undefined> {
+    const [trip] = await db.select().from(famTrips).where(eq(famTrips.id, id));
+    return trip || undefined;
+  }
+
+  async getFamTripsByCity(city: string): Promise<FamTrip[]> {
+    return await db.select().from(famTrips).where(eq(famTrips.city, city)).orderBy(famTrips.startDate);
+  }
+
+  async getFamTripsByOrganizerId(organizerId: string): Promise<FamTrip[]> {
+    return await db.select().from(famTrips).where(eq(famTrips.organizerId, organizerId)).orderBy(desc(famTrips.createdAt));
+  }
+
+  async getOpenFamTrips(): Promise<FamTrip[]> {
+    return await db.select().from(famTrips).where(eq(famTrips.status, "open")).orderBy(famTrips.startDate);
+  }
+
+  async createFamTrip(insertTrip: InsertFamTrip): Promise<FamTrip> {
+    const [trip] = await db.insert(famTrips).values(insertTrip as any).returning();
+    return trip;
+  }
+
+  async updateFamTrip(id: string, data: Partial<FamTrip>): Promise<FamTrip | undefined> {
+    const [trip] = await db.update(famTrips).set(data as any).where(eq(famTrips.id, id)).returning();
+    return trip || undefined;
+  }
+
+  async getFamTripRegistration(id: string): Promise<FamTripRegistration | undefined> {
+    const [registration] = await db.select().from(famTripRegistrations).where(eq(famTripRegistrations.id, id));
+    return registration || undefined;
+  }
+
+  async getFamTripRegistrationsByFamTripId(famTripId: string): Promise<FamTripRegistration[]> {
+    return await db.select().from(famTripRegistrations).where(eq(famTripRegistrations.famTripId, famTripId)).orderBy(desc(famTripRegistrations.createdAt));
+  }
+
+  async getFamTripRegistrationsByUserId(userId: string): Promise<FamTripRegistration[]> {
+    return await db.select().from(famTripRegistrations).where(eq(famTripRegistrations.userId, userId)).orderBy(desc(famTripRegistrations.createdAt));
+  }
+
+  async createFamTripRegistration(insertRegistration: InsertFamTripRegistration): Promise<FamTripRegistration> {
+    const [registration] = await db.insert(famTripRegistrations).values(insertRegistration as any).returning();
+    return registration;
+  }
+
+  async updateFamTripRegistration(id: string, data: Partial<FamTripRegistration>): Promise<FamTripRegistration | undefined> {
+    const [registration] = await db.update(famTripRegistrations).set(data as any).where(eq(famTripRegistrations.id, id)).returning();
+    return registration || undefined;
   }
 }
 

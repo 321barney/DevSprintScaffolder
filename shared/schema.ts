@@ -1349,3 +1349,311 @@ export type InsertDisruptionAlert = z.infer<typeof insertDisruptionAlertSchema>;
 
 export type DmcPartner = typeof dmcPartners.$inferSelect;
 export type InsertDmcPartner = z.infer<typeof insertDmcPartnerSchema>;
+
+// Notification Preferences - Slack/Teams integration settings
+export const notificationPreferences = pgTable("notification_preferences", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").references(() => companies.id).notNull(),
+  userId: uuid("user_id").references(() => users.id),
+  channel: text("channel").notNull().$type<"email" | "slack" | "teams" | "sms">(),
+  slackWebhookUrl: text("slack_webhook_url"),
+  slackChannelId: text("slack_channel_id"),
+  teamsWebhookUrl: text("teams_webhook_url"),
+  eventTypes: jsonb("event_types").default([]).notNull(),
+  enabled: boolean("enabled").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const notificationPreferencesRelations = relations(notificationPreferences, ({ one }) => ({
+  company: one(companies, {
+    fields: [notificationPreferences.companyId],
+    references: [companies.id],
+  }),
+  user: one(users, {
+    fields: [notificationPreferences.userId],
+    references: [users.id],
+  }),
+}));
+
+export const insertNotificationPreferenceSchema = createInsertSchema(notificationPreferences).omit({ id: true, createdAt: true, updatedAt: true });
+
+// Notification History - Record of sent notifications
+export const notificationHistory = pgTable("notification_history", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  preferenceId: uuid("preference_id").references(() => notificationPreferences.id),
+  recipientId: uuid("recipient_id").references(() => users.id),
+  eventType: text("event_type").notNull(),
+  channel: text("channel").notNull().$type<"email" | "slack" | "teams" | "sms">(),
+  subject: text("subject").notNull(),
+  message: text("message").notNull(),
+  metadata: jsonb("metadata").default({}).notNull(),
+  status: text("status").default("sent").notNull().$type<"sent" | "failed" | "pending">(),
+  sentAt: timestamp("sent_at").defaultNow().notNull(),
+});
+
+export const notificationHistoryRelations = relations(notificationHistory, ({ one }) => ({
+  preference: one(notificationPreferences, {
+    fields: [notificationHistory.preferenceId],
+    references: [notificationPreferences.id],
+  }),
+  recipient: one(users, {
+    fields: [notificationHistory.recipientId],
+    references: [users.id],
+  }),
+}));
+
+export const insertNotificationHistorySchema = createInsertSchema(notificationHistory).omit({ id: true, sentAt: true });
+
+// Virtual Cards - Company virtual cards for expenses
+export const virtualCards = pgTable("virtual_cards", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").references(() => companies.id).notNull(),
+  costCenterId: uuid("cost_center_id").references(() => costCenters.id),
+  cardNumber: text("card_number").notNull(),
+  cardholderName: text("cardholder_name").notNull(),
+  expiryDate: text("expiry_date").notNull(),
+  spendLimit: integer("spend_limit_mad"),
+  currentSpend: integer("current_spend_mad").default(0).notNull(),
+  provider: text("provider").notNull().$type<"stripe" | "brex" | "ramp" | "divvy">(),
+  status: text("status").default("active").notNull().$type<"active" | "frozen" | "cancelled">(),
+  metadata: jsonb("metadata").default({}).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const virtualCardsRelations = relations(virtualCards, ({ one }) => ({
+  company: one(companies, {
+    fields: [virtualCards.companyId],
+    references: [companies.id],
+  }),
+  costCenter: one(costCenters, {
+    fields: [virtualCards.costCenterId],
+    references: [costCenters.id],
+  }),
+}));
+
+export const insertVirtualCardSchema = createInsertSchema(virtualCards).omit({ id: true, createdAt: true });
+
+// Expense Entries - Tracked expenses for reconciliation
+export const expenseEntries = pgTable("expense_entries", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").references(() => companies.id).notNull(),
+  groupBookingId: uuid("group_booking_id").references(() => groupBookings.id),
+  virtualCardId: uuid("virtual_card_id").references(() => virtualCards.id),
+  costCenterId: uuid("cost_center_id").references(() => costCenters.id),
+  userId: uuid("user_id").references(() => users.id).notNull(),
+  amountMad: integer("amount_mad").notNull(),
+  category: text("category").notNull().$type<"accommodation" | "transport" | "catering" | "av_rental" | "other">(),
+  description: text("description").notNull(),
+  receiptUrl: text("receipt_url"),
+  transactionDate: timestamp("transaction_date").notNull(),
+  status: text("status").default("pending").notNull().$type<"pending" | "approved" | "rejected" | "reconciled">(),
+  reconciliationNotes: text("reconciliation_notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const expenseEntriesRelations = relations(expenseEntries, ({ one }) => ({
+  company: one(companies, {
+    fields: [expenseEntries.companyId],
+    references: [companies.id],
+  }),
+  groupBooking: one(groupBookings, {
+    fields: [expenseEntries.groupBookingId],
+    references: [groupBookings.id],
+  }),
+  virtualCard: one(virtualCards, {
+    fields: [expenseEntries.virtualCardId],
+    references: [virtualCards.id],
+  }),
+  costCenter: one(costCenters, {
+    fields: [expenseEntries.costCenterId],
+    references: [costCenters.id],
+  }),
+  user: one(users, {
+    fields: [expenseEntries.userId],
+    references: [users.id],
+  }),
+}));
+
+export const insertExpenseEntrySchema = createInsertSchema(expenseEntries).omit({ id: true, createdAt: true });
+
+// Sustainability Metrics - CO2 estimates and ESG tracking
+export const sustainabilityMetrics = pgTable("sustainability_metrics", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  groupBookingId: uuid("group_booking_id").references(() => groupBookings.id).notNull(),
+  totalCo2Kg: decimal("total_co2_kg", { precision: 10, scale: 2 }).notNull(),
+  transportCo2Kg: decimal("transport_co2_kg", { precision: 10, scale: 2 }).default("0").notNull(),
+  accommodationCo2Kg: decimal("accommodation_co2_kg", { precision: 10, scale: 2 }).default("0").notNull(),
+  cateringCo2Kg: decimal("catering_co2_kg", { precision: 10, scale: 2 }).default("0").notNull(),
+  energyCo2Kg: decimal("energy_co2_kg", { precision: 10, scale: 2 }).default("0").notNull(),
+  wasteKg: decimal("waste_kg", { precision: 10, scale: 2 }).default("0").notNull(),
+  recyclablePercentage: decimal("recyclable_percentage", { precision: 5, scale: 2 }).default("0").notNull(),
+  localSourcingPercentage: decimal("local_sourcing_percentage", { precision: 5, scale: 2 }).default("0").notNull(),
+  esgScore: decimal("esg_score", { precision: 5, scale: 2 }).default("0").notNull(),
+  certifications: jsonb("certifications").default([]).notNull(),
+  offsetPurchased: boolean("offset_purchased").default(false).notNull(),
+  offsetProvider: text("offset_provider"),
+  calculationMethod: text("calculation_method").notNull(),
+  metadata: jsonb("metadata").default({}).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const sustainabilityMetricsRelations = relations(sustainabilityMetrics, ({ one }) => ({
+  groupBooking: one(groupBookings, {
+    fields: [sustainabilityMetrics.groupBookingId],
+    references: [groupBookings.id],
+  }),
+}));
+
+export const insertSustainabilityMetricSchema = createInsertSchema(sustainabilityMetrics).omit({ id: true, createdAt: true });
+
+// Quality Audits - Secret shopper and quality assessments
+export const qualityAudits = pgTable("quality_audits", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  venueId: uuid("venue_id").references(() => venues.id),
+  providerId: uuid("provider_id").references(() => providers.id),
+  auditorId: uuid("auditor_id").references(() => users.id).notNull(),
+  auditType: text("audit_type").notNull().$type<"secret_shopper" | "scheduled" | "complaint_followup">(),
+  overallScore: decimal("overall_score", { precision: 3, scale: 2 }).notNull(),
+  criteriaScores: jsonb("criteria_scores").default({}).notNull(),
+  findings: text("findings").notNull(),
+  photos: jsonb("photos").default([]).notNull(),
+  actionItems: jsonb("action_items").default([]).notNull(),
+  status: text("status").default("completed").notNull().$type<"scheduled" | "in_progress" | "completed" | "cancelled">(),
+  visitDate: timestamp("visit_date").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const qualityAuditsRelations = relations(qualityAudits, ({ one }) => ({
+  venue: one(venues, {
+    fields: [qualityAudits.venueId],
+    references: [venues.id],
+  }),
+  provider: one(providers, {
+    fields: [qualityAudits.providerId],
+    references: [providers.id],
+  }),
+  auditor: one(users, {
+    fields: [qualityAudits.auditorId],
+    references: [users.id],
+  }),
+}));
+
+export const insertQualityAuditSchema = createInsertSchema(qualityAudits).omit({ id: true, createdAt: true });
+
+// Post Event NPS - Net Promoter Score surveys
+export const postEventNps = pgTable("post_event_nps", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  groupBookingId: uuid("group_booking_id").references(() => groupBookings.id).notNull(),
+  respondentId: uuid("respondent_id").references(() => users.id).notNull(),
+  npsScore: integer("nps_score").notNull(),
+  feedback: text("feedback"),
+  categories: jsonb("categories").default({}).notNull(),
+  wouldRecommend: boolean("would_recommend").notNull(),
+  improvementAreas: jsonb("improvement_areas").default([]).notNull(),
+  highlights: jsonb("highlights").default([]).notNull(),
+  responseDate: timestamp("response_date").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const postEventNpsRelations = relations(postEventNps, ({ one }) => ({
+  groupBooking: one(groupBookings, {
+    fields: [postEventNps.groupBookingId],
+    references: [groupBookings.id],
+  }),
+  respondent: one(users, {
+    fields: [postEventNps.respondentId],
+    references: [users.id],
+  }),
+}));
+
+export const insertPostEventNpsSchema = createInsertSchema(postEventNps).omit({ id: true, createdAt: true, responseDate: true });
+
+// FAM Trips - Familiarization trips and buyer-supplier showcases
+export const famTrips = pgTable("fam_trips", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizerId: uuid("organizer_id").references(() => providers.id).notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  city: text("city").notNull(),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date").notNull(),
+  maxAttendees: integer("max_attendees").notNull(),
+  currentAttendees: integer("current_attendees").default(0).notNull(),
+  targetAudience: text("target_audience").notNull().$type<"corporate_buyers" | "event_planners" | "travel_managers" | "all">(),
+  venuesIncluded: jsonb("venues_included").default([]).notNull(),
+  agenda: jsonb("agenda").default([]).notNull(),
+  costPerPerson: integer("cost_per_person_mad"),
+  status: text("status").default("planning").notNull().$type<"planning" | "open" | "full" | "completed" | "cancelled">(),
+  registrationDeadline: timestamp("registration_deadline").notNull(),
+  photos: jsonb("photos").default([]).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const famTripsRelations = relations(famTrips, ({ one }) => ({
+  organizer: one(providers, {
+    fields: [famTrips.organizerId],
+    references: [providers.id],
+  }),
+}));
+
+export const insertFamTripSchema = createInsertSchema(famTrips).omit({ id: true, createdAt: true, updatedAt: true });
+
+// FAM Trip Registrations - Track attendee registrations
+export const famTripRegistrations = pgTable("fam_trip_registrations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  famTripId: uuid("fam_trip_id").references(() => famTrips.id).notNull(),
+  userId: uuid("user_id").references(() => users.id).notNull(),
+  companyId: uuid("company_id").references(() => companies.id),
+  status: text("status").default("pending").notNull().$type<"pending" | "confirmed" | "waitlist" | "cancelled">(),
+  specialRequests: text("special_requests"),
+  attendedAt: timestamp("attended_at"),
+  feedback: text("feedback"),
+  rating: decimal("rating", { precision: 3, scale: 2 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const famTripRegistrationsRelations = relations(famTripRegistrations, ({ one }) => ({
+  famTrip: one(famTrips, {
+    fields: [famTripRegistrations.famTripId],
+    references: [famTrips.id],
+  }),
+  user: one(users, {
+    fields: [famTripRegistrations.userId],
+    references: [users.id],
+  }),
+  company: one(companies, {
+    fields: [famTripRegistrations.companyId],
+    references: [companies.id],
+  }),
+}));
+
+export const insertFamTripRegistrationSchema = createInsertSchema(famTripRegistrations).omit({ id: true, createdAt: true });
+
+export type NotificationPreference = typeof notificationPreferences.$inferSelect;
+export type InsertNotificationPreference = z.infer<typeof insertNotificationPreferenceSchema>;
+
+export type NotificationHistory = typeof notificationHistory.$inferSelect;
+export type InsertNotificationHistory = z.infer<typeof insertNotificationHistorySchema>;
+
+export type VirtualCard = typeof virtualCards.$inferSelect;
+export type InsertVirtualCard = z.infer<typeof insertVirtualCardSchema>;
+
+export type ExpenseEntry = typeof expenseEntries.$inferSelect;
+export type InsertExpenseEntry = z.infer<typeof insertExpenseEntrySchema>;
+
+export type SustainabilityMetric = typeof sustainabilityMetrics.$inferSelect;
+export type InsertSustainabilityMetric = z.infer<typeof insertSustainabilityMetricSchema>;
+
+export type QualityAudit = typeof qualityAudits.$inferSelect;
+export type InsertQualityAudit = z.infer<typeof insertQualityAuditSchema>;
+
+export type PostEventNps = typeof postEventNps.$inferSelect;
+export type InsertPostEventNps = z.infer<typeof insertPostEventNpsSchema>;
+
+export type FamTrip = typeof famTrips.$inferSelect;
+export type InsertFamTrip = z.infer<typeof insertFamTripSchema>;
+
+export type FamTripRegistration = typeof famTripRegistrations.$inferSelect;
+export type InsertFamTripRegistration = z.infer<typeof insertFamTripRegistrationSchema>;

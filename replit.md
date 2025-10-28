@@ -41,6 +41,12 @@ No specific user preferences were provided in the original document.
   - **Event Reporting Dashboard**: Comprehensive analytics tracking total spend, savings, RFP conversion rates, booking counts, on-time delivery percentages, and custom metrics per company per period.
   - **Duty of Care & Travel Safety**: Itinerary management with traveler profiles, emergency contacts, risk assessments, and real-time disruption alerts (weather, flight delays, health, security) with severity levels and acknowledgment tracking.
   - **DMC Network**: Destination Management Company integration with service catalogs, destination coverage, group size limits, language offerings, certifications, insurance details, and verification status.
+  - **SEO Landing Pages**: City-specific venue search pages ("meeting rooms in {city}") with capacity/layout filters for organic traffic acquisition.
+  - **Slack/Teams Notifications**: Integration with collaboration platforms for real-time booking/approval notifications, plus .ics calendar export for seamless calendar integration.
+  - **Virtual Cards & Expense Tracking**: Company virtual card management with spend limits, automated expense entry tracking, receipt management, and reconciliation workflows.
+  - **Sustainability & ESG**: CO₂ emission estimates per booking (transport, accommodation, catering, energy), waste tracking, local sourcing percentages, ESG scoring, and carbon offset purchasing.
+  - **Quality Assurance System**: Secret shopper audits, scheduled venue inspections, post-event NPS surveys with detailed feedback categories and improvement tracking.
+  - **FAM Trips & Buyer Showcases**: Provider-organized familiarization trips for corporate buyers, event planners, and travel managers with registration management and post-trip feedback.
 
 ### System Design Choices
 - **Database**: PostgreSQL with Drizzle ORM.
@@ -49,6 +55,7 @@ No specific user preferences were provided in the original document.
     - **Trip to Work Tables**: `provider_profiles`, `vehicles`, `provider_documents`, `trips`, `trip_tracks`.
     - **MICE/B2B Tables**: `companies`, `cost_centers`, `traveler_profiles`, `venues`, `venue_rooms`, `rfps`, `quotes`, `group_bookings`, `approvals`.
     - **Advanced MICE Tables**: `partner_tiers`, `corporate_rates`, `milestone_payments`, `event_reports`, `itineraries`, `disruption_alerts`, `dmc_partners`.
+    - **Phase 5 Enhancement Tables**: `notification_preferences`, `notification_history`, `virtual_cards`, `expense_entries`, `sustainability_metrics`, `quality_audits`, `post_event_nps`, `fam_trips`, `fam_trip_registrations`.
 - **API Endpoints**:
     - **Authentication**: `POST /api/auth/signup`, `POST /api/auth/login`.
     - **Jobs**: `POST /api/jobs`, `GET /api/jobs`, `GET /api/jobs/:id`, `POST /api/jobs/:id/cancel`.
@@ -65,6 +72,12 @@ No specific user preferences were provided in the original document.
     - **Advanced MICE - Reporting**: `GET /api/event-reports`, `POST /api/event-reports`, `GET /api/event-reports/:id`.
     - **Advanced MICE - Duty of Care**: `GET /api/itineraries`, `POST /api/itineraries`, `GET /api/itineraries/:id`, `PATCH /api/itineraries/:id`, `GET /api/disruption-alerts`, `POST /api/disruption-alerts`, `GET /api/disruption-alerts/:id`, `PATCH /api/disruption-alerts/:id`.
     - **Advanced MICE - DMC Partners**: `GET /api/dmc-partners`, `POST /api/dmc-partners`, `GET /api/dmc-partners/:id`, `PATCH /api/dmc-partners/:id`.
+    - **Phase 5 - Notifications**: `GET /api/notification-preferences`, `POST /api/notification-preferences`, `PATCH /api/notification-preferences/:id`.
+    - **Phase 5 - Expenses**: `GET /api/virtual-cards`, `POST /api/virtual-cards`, `GET /api/expense-entries`, `POST /api/expense-entries`, `PATCH /api/expense-entries/:id`.
+    - **Phase 5 - Sustainability**: `GET /api/sustainability-metrics`, `POST /api/sustainability-metrics`.
+    - **Phase 5 - Quality**: `GET /api/quality-audits`, `POST /api/quality-audits`, `GET /api/post-event-nps`, `POST /api/post-event-nps`.
+    - **Phase 5 - FAM Trips**: `GET /api/fam-trips`, `POST /api/fam-trips`, `GET /api/fam-trips/:id`, `PATCH /api/fam-trips/:id`, `GET /api/fam-trip-registrations`, `POST /api/fam-trip-registrations`, `PATCH /api/fam-trip-registrations/:id`.
+    - **Phase 5 - SEO & Calendar**: `GET /api/seo/meeting-rooms/:city`, `GET /api/group-bookings/:id/calendar`.
 - **AI Modules**:
     - **Pricing Band**: `server/ai/pricing.ts` calculates price ranges based on city, category, distance, passengers, and time.
     - **Offer Scoring**: `server/ai/scoring.ts` scores offers based on provider rating, price fairness, ETA, compliance, and job fit.

@@ -14,7 +14,10 @@ import {
   insertRfpSchema, insertQuoteSchema, insertCompanySchema, insertCostCenterSchema,
   insertTravelerProfileSchema, insertGroupBookingSchema, insertApprovalSchema,
   insertPartnerTierSchema, insertCorporateRateSchema, insertMilestonePaymentSchema,
-  insertEventReportSchema, insertItinerarySchema, insertDisruptionAlertSchema, insertDmcPartnerSchema
+  insertEventReportSchema, insertItinerarySchema, insertDisruptionAlertSchema, insertDmcPartnerSchema,
+  insertNotificationPreferenceSchema, insertVirtualCardSchema, insertExpenseEntrySchema,
+  insertSustainabilityMetricSchema, insertQualityAuditSchema, insertPostEventNpsSchema,
+  insertFamTripSchema, insertFamTripRegistrationSchema
 } from "@shared/schema";
 import { z } from "zod";
 
@@ -1494,6 +1497,274 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
 
     res.json(partner);
+  }));
+
+  // ===== PHASE 5: SEO, NOTIFICATIONS, EXPENSES, SUSTAINABILITY, QUALITY, SHOWCASES =====
+  
+  // Notification Preferences Routes
+  app.get("/api/notification-preferences", requireAuth, asyncHandler(async (req, res) => {
+    const { companyId, userId } = req.query;
+    
+    if (companyId) {
+      const prefs = await storage.getNotificationPreferencesByCompanyId(companyId as string);
+      return res.json(prefs);
+    }
+    
+    if (userId) {
+      const prefs = await storage.getNotificationPreferencesByUserId(userId as string);
+      return res.json(prefs);
+    }
+    
+    res.json([]);
+  }));
+
+  app.post("/api/notification-preferences", requireAuth, asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const validatedData = insertNotificationPreferenceSchema.parse(req.body);
+    const pref = await storage.createNotificationPreference(validatedData);
+    res.json(pref);
+  }));
+
+  app.patch("/api/notification-preferences/:id", requireAuth, asyncHandler(async (req, res) => {
+    const pref = await storage.updateNotificationPreference(req.params.id, req.body);
+    res.json(pref);
+  }));
+
+  // Virtual Cards Routes
+  app.get("/api/virtual-cards", requireAuth, asyncHandler(async (req, res) => {
+    const { companyId, costCenterId } = req.query;
+    
+    if (costCenterId) {
+      const cards = await storage.getVirtualCardsByCostCenterId(costCenterId as string);
+      return res.json(cards);
+    }
+    
+    if (companyId) {
+      const cards = await storage.getVirtualCardsByCompanyId(companyId as string);
+      return res.json(cards);
+    }
+    
+    res.json([]);
+  }));
+
+  app.post("/api/virtual-cards", requireAuth, requireRole('buyer', 'admin'), asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const validatedData = insertVirtualCardSchema.parse(req.body);
+    const card = await storage.createVirtualCard(validatedData);
+    res.json(card);
+  }));
+
+  // Expense Entries Routes
+  app.get("/api/expense-entries", requireAuth, asyncHandler(async (req, res) => {
+    const { companyId, groupBookingId } = req.query;
+    
+    if (groupBookingId) {
+      const entries = await storage.getExpenseEntriesByGroupBookingId(groupBookingId as string);
+      return res.json(entries);
+    }
+    
+    if (companyId) {
+      const entries = await storage.getExpenseEntriesByCompanyId(companyId as string);
+      return res.json(entries);
+    }
+    
+    res.json([]);
+  }));
+
+  app.post("/api/expense-entries", requireAuth, asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const validatedData = insertExpenseEntrySchema.parse(req.body);
+    const entry = await storage.createExpenseEntry(validatedData);
+    res.json(entry);
+  }));
+
+  app.patch("/api/expense-entries/:id", requireAuth, asyncHandler(async (req, res) => {
+    const entry = await storage.updateExpenseEntry(req.params.id, req.body);
+    res.json(entry);
+  }));
+
+  // Sustainability Metrics Routes
+  app.get("/api/sustainability-metrics", requireAuth, asyncHandler(async (req, res) => {
+    const { groupBookingId } = req.query;
+    
+    if (groupBookingId) {
+      const metrics = await storage.getSustainabilityMetricsByGroupBookingId(groupBookingId as string);
+      return res.json(metrics);
+    }
+    
+    res.json([]);
+  }));
+
+  app.post("/api/sustainability-metrics", requireAuth, asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const validatedData = insertSustainabilityMetricSchema.parse(req.body);
+    const metric = await storage.createSustainabilityMetric(validatedData);
+    res.json(metric);
+  }));
+
+  // Quality Audits Routes
+  app.get("/api/quality-audits", requireAuth, asyncHandler(async (req, res) => {
+    const { venueId, providerId } = req.query;
+    
+    if (venueId) {
+      const audits = await storage.getQualityAuditsByVenueId(venueId as string);
+      return res.json(audits);
+    }
+    
+    if (providerId) {
+      const audits = await storage.getQualityAuditsByProviderId(providerId as string);
+      return res.json(audits);
+    }
+    
+    res.json([]);
+  }));
+
+  app.post("/api/quality-audits", requireAuth, requireRole('admin'), asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const validatedData = insertQualityAuditSchema.parse(req.body);
+    const audit = await storage.createQualityAudit(validatedData);
+    res.json(audit);
+  }));
+
+  // Post Event NPS Routes
+  app.get("/api/post-event-nps", requireAuth, asyncHandler(async (req, res) => {
+    const { groupBookingId } = req.query;
+    
+    if (groupBookingId) {
+      const responses = await storage.getPostEventNpsByGroupBookingId(groupBookingId as string);
+      return res.json(responses);
+    }
+    
+    res.json([]);
+  }));
+
+  app.post("/api/post-event-nps", requireAuth, asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const validatedData = insertPostEventNpsSchema.parse(req.body);
+    const nps = await storage.createPostEventNps(validatedData);
+    res.json(nps);
+  }));
+
+  // FAM Trips Routes
+  app.get("/api/fam-trips", requireAuth, asyncHandler(async (req, res) => {
+    const { city, organizerId, openOnly } = req.query;
+    
+    if (openOnly === 'true') {
+      const trips = await storage.getOpenFamTrips();
+      return res.json(trips);
+    }
+    
+    if (city) {
+      const trips = await storage.getFamTripsByCity(city as string);
+      return res.json(trips);
+    }
+    
+    if (organizerId) {
+      const trips = await storage.getFamTripsByOrganizerId(organizerId as string);
+      return res.json(trips);
+    }
+    
+    res.json([]);
+  }));
+
+  app.get("/api/fam-trips/:id", requireAuth, asyncHandler(async (req, res) => {
+    const trip = await storage.getFamTrip(req.params.id);
+    if (!trip) {
+      return res.status(404).json({ error: "FAM trip not found" });
+    }
+    res.json(trip);
+  }));
+
+  app.post("/api/fam-trips", requireAuth, requireRole('provider'), asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const validatedData = insertFamTripSchema.parse(req.body);
+    const trip = await storage.createFamTrip(validatedData);
+    res.json(trip);
+  }));
+
+  app.patch("/api/fam-trips/:id", requireAuth, asyncHandler(async (req, res) => {
+    const trip = await storage.updateFamTrip(req.params.id, req.body);
+    res.json(trip);
+  }));
+
+  // FAM Trip Registrations Routes
+  app.get("/api/fam-trip-registrations", requireAuth, asyncHandler(async (req, res) => {
+    const { famTripId, userId } = req.query;
+    
+    if (famTripId) {
+      const registrations = await storage.getFamTripRegistrationsByFamTripId(famTripId as string);
+      return res.json(registrations);
+    }
+    
+    if (userId) {
+      const registrations = await storage.getFamTripRegistrationsByUserId(userId as string);
+      return res.json(registrations);
+    }
+    
+    res.json([]);
+  }));
+
+  app.post("/api/fam-trip-registrations", requireAuth, asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const validatedData = insertFamTripRegistrationSchema.parse(req.body);
+    const registration = await storage.createFamTripRegistration(validatedData);
+    res.json(registration);
+  }));
+
+  app.patch("/api/fam-trip-registrations/:id", requireAuth, asyncHandler(async (req, res) => {
+    const registration = await storage.updateFamTripRegistration(req.params.id, req.body);
+    res.json(registration);
+  }));
+
+  // SEO Landing Pages - Dynamic venue search by city (uses existing venues API with SEO-friendly params)
+  app.get("/api/seo/meeting-rooms/:city", asyncHandler(async (req, res) => {
+    const { city } = req.params;
+    const { capacity, layout } = req.query;
+    
+    const venues = await storage.getVenues({ city, verified: true });
+    
+    res.json({
+      city,
+      totalVenues: venues.length,
+      venues: venues.map(v => ({
+        id: v.id,
+        name: v.name,
+        type: v.type,
+        capacity: v.capacity,
+        city: v.city,
+        verified: v.verified,
+      })),
+      seoMeta: {
+        title: `Meeting Rooms in ${city} | Trip2work MICE`,
+        description: `Find verified meeting rooms and event venues in ${city}. Compare capacities, layouts, and pricing for your next corporate event.`,
+      },
+    });
+  }));
+
+  // Calendar Export (.ics) for bookings
+  app.get("/api/group-bookings/:id/calendar", requireAuth, asyncHandler(async (req, res) => {
+    const booking = await storage.getGroupBooking(req.params.id);
+    if (!booking) {
+      return res.status(404).json({ error: "Booking not found" });
+    }
+    
+    const icsContent = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Trip2work//MICE Platform//EN
+BEGIN:VEVENT
+UID:${booking.id}@trip2work.ma
+DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').split('.')[0]}Z
+DTSTART:${booking.startDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z
+DTEND:${booking.endDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z
+SUMMARY:${booking.eventName}
+DESCRIPTION:Group booking for ${booking.attendeeCount} attendees
+STATUS:${booking.status.toUpperCase()}
+END:VEVENT
+END:VCALENDAR`;
+    
+    res.setHeader('Content-Type', 'text/calendar');
+    res.setHeader('Content-Disposition', `attachment; filename="booking-${booking.id}.ics"`);
+    res.send(icsContent);
   }));
 
   const httpServer = createServer(app);
