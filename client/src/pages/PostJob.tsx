@@ -45,8 +45,12 @@ export default function PostJob() {
   };
 
   const createJobMutation = useMutation({
-    mutationFn: (data: any) => apiRequest('POST', '/api/jobs', data),
+    mutationFn: async (data: any) => {
+      const response = await apiRequest('POST', '/api/jobs', data);
+      return await response.json();
+    },
     onSuccess: (newJob) => {
+      console.log('Job created successfully:', newJob);
       queryClient.invalidateQueries({ queryKey: ['/api/jobs'] });
       toast({
         title: 'Travail publié',
@@ -70,7 +74,7 @@ export default function PostJob() {
       category: formData.category,
       city: formData.city,
       budgetHintMad: formData.budgetHintMad ? parseInt(formData.budgetHintMad) : undefined,
-      buyerId: 'demo-buyer', // TODO: Get from auth context
+      buyerId: '80bc66ef-1602-4a00-9272-0aef66d83d3c', // TODO: Get from auth context (ahmed@example.ma)
     };
     console.log('Submitting job with payload:', payload);
     createJobMutation.mutate(payload);

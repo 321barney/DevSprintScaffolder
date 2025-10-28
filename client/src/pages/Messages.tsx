@@ -41,7 +41,7 @@ export default function Messages() {
     mutationFn: (data: { jobId: string; body: string }) =>
       apiRequest('POST', '/api/messages', {
         jobId: data.jobId,
-        senderId: currentUser?.id || 'demo-buyer',
+        senderId: currentUser?.id || '80bc66ef-1602-4a00-9272-0aef66d83d3c', // TODO: Get from auth (ahmed@example.ma)
         body: data.body,
       }),
     onSuccess: () => {

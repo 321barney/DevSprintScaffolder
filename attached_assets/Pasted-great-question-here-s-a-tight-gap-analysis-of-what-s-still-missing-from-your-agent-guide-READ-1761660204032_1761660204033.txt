@@ -1,0 +1,179 @@
+great question. here’s a tight **gap analysis** of what’s still missing from your agent guide + README to truly let an AI agent build and ship the whole app end-to-end.
+
+# What’s missing (and what to add)
+
+## 1) Non-functional requirements (targets the agent can code toward)
+
+* **SLOs:** p95 latency (API < 300 ms; offer stream < 1 s), uptime ≥ 99.5%, cold start < 2 s.
+* **Scale limits:** 10k DAU, 2k concurrent sockets/job, 50 CPS on bids.
+* **Rate limits & idempotency:** per-IP/user, idempotency keys on payments/accept.
+* **Accessibility:** WCAG 2.1 AA (mobile: TalkBack/VoiceOver, dynamic text sizes).
+* **Offline/poor network:** retry/backoff, local queue, offline banners.
+
+## 2) Security, privacy, and compliance details
+
+* **Threat model:** fake KYC, collusion (buyer+provider), off-platform steering, identity theft, lender fraud, stolen cards.
+* **Controls:** selfie-ID liveness, doc hash + expiry blockers, number masking, GPS proof-of-presence, fraud scoring, velocity checks, device fingerprinting.
+* **RBAC & audit:** admin/support/trust/lender roles; **immutable audit log** of KYC edits, payouts, verifications.
+* **Data policy:** retention schedule (e.g., chats 18 mo, KYC 5 yrs), data-deletion API, encryption at rest + in transit, backups + restore drill.
+* **Legal packs:** Terms, Privacy, Broker disclosure (Bank Al-Maghrib), transport permit policy, content policy, cookies banner for web.
+
+## 3) Trust & Safety operations
+
+* **Disputes runbook:** timelines, evidence types, decision matrix, refund ladder.
+* **Content moderation:** in-chat filters, profanity/harassment tags, escalation.
+* **Marketplace integrity:** off-platform detection (keyword + link masking), graduated penalties, re-verification cadence.
+
+## 4) Payments, escrow, and financing specifics
+
+* **PSP/escrow flowcharts:** pre-auth → capture → partial refunds; idempotent webhooks; payout schedules (T+2).
+* **Chargeback handling:** evidence kit generator (receipts, GPS, chat).
+* **Financing KYC/AML:** PEP/sanctions provider, affordability limits, consent wording; lender SLA (response < 48 h), sandbox + go-live checklist.
+
+## 5) AI/LLM engineering rigor
+
+* **Prompt versioning + RAG:** versioned templates, prompt IDs in logs, retrieval sources stored.
+* **Fallbacks:** cached heuristics when OpenAI down; circuit breaker.
+* **LLM evaluations:** golden tasks for structure/price/score/contract; drift alarms; bias checks (provider fairness).
+* **Safety:** PII redaction in prompts, profanity filter, deterministic JSON outputs (JSON schema validator).
+
+## 6) Architecture & ops polish
+
+* **Diagrams:** C4 context + component + sequence for “Post → Bid → Accept → Payout”.
+* **Caching strategy:** Redis layers (read-through for jobs/offers, short TTL), HTTP cache headers.
+* **Observability:** dashboards (latency, error rate, offers/job, TTF-offer, win rate), alert thresholds & paging policy.
+* **Cost guardrails:** expected monthly budget (DB, egress, LLM), autoscaling rules, anomaly alerts.
+
+## 7) Product & growth mechanics
+
+* **Liquidity KPIs:** city go-live gates (≥50 active providers, median TTF-offer < 60 s, ≥3 offers/job).
+* **Supply acquisition playbook:** K-factor, referral bonuses, verification SLAs.
+* **Analytics taxonomy:** events + properties; funnels (post→view offers→accept→complete); provider cohorting.
+
+## 8) QA & release engineering
+
+* **Test matrix:** Android (low/mid/high), iOS (2 versions), weak network profiles.
+* **Security tests:** SAST/DAST, dependency audit, secrets scanner, fuzz tests on parsers.
+* **Store release:** ASO metadata, screenshots, privacy nutrition labels, review checklist.
+
+## 9) Data model hardening
+
+* **Indexes & constraints:** unique (one active offer/provider/job), partial indexes on status, FK cascades.
+* **Geo:** PostGIS for proximity/route boxes (or pre-compute grid); city+created_at composite indexes.
+* **Audit tables:** KYC changes, payouts, webhooks, role changes.
+
+---
+
+# Drop-in additions for your AGENT_GUIDE.md
+
+## A) Non-functional Requirements (paste)
+
+```md
+## Non-Functional Requirements
+- Performance: API p95 < 300ms, WS offer fanout < 1s; error rate < 1%.
+- Availability: 99.5% monthly; zero data loss RPO, 15-min RTO.
+- Rate Limits: 60 req/min per user; 10 accept ops/min per buyer; idempotency keys on POST /offers/:id/accept and payment webhooks.
+- Accessibility: WCAG 2.1 AA. Mobile supports dynamic text, TalkBack/VoiceOver.
+- Offline: retries with exponential backoff; local outbox for offers (provider).
+```
+
+## B) RBAC Matrix (paste)
+
+```md
+## Roles & Permissions
+| Action                         | Buyer | Provider | Support | Trust | Admin | Lender |
+|--------------------------------|:----:|:-------:|:------:|:----:|:----:|:-----:|
+| Post job / view offers         |  ✅   |   ❌     |  👁️    |  👁️  |  👁️  |  ❌   |
+| Bid on job                     |  ❌   |   ✅     |  👁️    |  👁️  |  👁️  |  ❌   |
+| Accept/Cancel                  |  ✅   |   ❌     |  ✅     |  ✅   |  ✅   |  ❌   |
+| KYC submit / verify            |  ❌   |   ✅     |  👁️    |  ✅   |  ✅   |  ❌   |
+| Dispute actions                |  ✅   |   ✅     |  ✅     |  ✅   |  ✅   |  ❌   |
+| Financing lead view            |  ✅   |   ✅     |  👁️    |  👁️  |  👁️  |  ✅   |
+| Payouts / webhook admin        |  ❌   |   ❌     |  ❌     |  ❌   |  ✅   |  ❌   |
+All changes in Support/Trust/Admin are audit-logged.
+```
+
+## C) Trust & Safety Playbook (paste)
+
+```md
+## Trust & Safety
+- No-show policy: free cancel until T-30m; provider fee after; system-enforced.
+- Off-platform steering: link masking, warnings, repeat offense → shadow-ban.
+- Evidence kit: GPS pings, chat logs, receipts, KYC snapshots (hashed).
+- Dispute SLA: initial response < 24h; resolution targets 5 business days.
+```
+
+## D) AI Evaluations (paste)
+
+```md
+## LLM Evaluations
+- StructureJob: 50 golden prompts; success if JSON validates & recall>0.95 on required fields.
+- PriceBand: MAPE < 20% vs baseline dataset.
+- ScoreOffer: NDCG@3 > 0.8 vs human-ranked sample.
+- ContractDraft: bilingual completeness checklist (10 clauses) pass rate > 0.9.
+- Fallbacks: if LLM fails or times out > 2s, use heuristic module; log incident.
+```
+
+## E) Incident Response (paste)
+
+```md
+## Incident Response
+- Severity levels SEV1–SEV4; runbooks in /docs/runbooks/.
+- On-call: weekly rotation; paging via alerts (5xx > 2% 5m; queue backlog > 5k; LLM failures > 20%).
+- Postmortems within 48h; action items tracked as issues with owners/dates.
+```
+
+## F) Payments & Webhooks (paste)
+
+```md
+## Payments & Webhooks
+- Webhooks must be idempotent (store event_id); verify signatures.
+- Flow: pre-auth on accept → capture on completion → partial refund path.
+- Payouts batched daily; negative balance guard; exportable ledger.
+```
+
+## G) Data Retention (paste)
+
+```md
+## Data Retention & Privacy
+- Chats: 18 months; Ratings: lifetime; KYC: 5 years post last payout.
+- Delete-my-data endpoint: anonymize jobs/offers, purge PII within 30 days.
+- Backups: hourly WAL, daily full; monthly restore drill.
+```
+
+## H) Observability (paste)
+
+```md
+## Observability
+- Dashboards: API latency/error, Jobs open, Offers/job, Time-to-first-offer, Acceptance rate, Provider online count, LLM success rate, Cost/req.
+- Alerts: 5xx>1% (5m), TTF-offer>120s (10m), LLM fail>10% (10m), payout failures>0.
+```
+
+## I) City Go-Live Gates (paste)
+
+```md
+## City Go-Live Criteria
+- Supply: ≥ 50 verified providers active weekly.
+- Liquidity: median time-to-first-offer ≤ 60s; ≥ 3 offers/job.
+- Quality: on-time rate ≥ 92%; dispute rate < 2%; NPS ≥ 40.
+```
+
+## J) Store Release Checklist (paste)
+
+```md
+## Mobile Store Releases
+- Privacy labels complete; screenshots in FR/AR; crash-free users ≥ 99%.
+- Versioning: SemVer; release notes; staged rollout (10%→50%→100%).
+```
+
+---
+
+## Quick wins the agent can implement immediately
+
+* Add **RBAC middleware + audit log** tables.
+* Add **idempotency keys** on `accept` and payment handlers.
+* Wire **LLM fallback** to heuristic price/score modules.
+* Create **alerting** for “time-to-first-offer” and “LLM failure rate”.
+* Generate **legal placeholders** (Terms/Privacy/Broker Disclosure) into `/docs/legal/`.
+
+if you want, I can turn these into concrete PRs: (1) RBAC + audit schema & middleware, and (2) LLM eval harness + fallback logic.

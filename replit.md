@@ -1,110 +1,259 @@
-# SoukMatch - Morocco Marketplace Platform
+# SoukMatch - Morocco Marketplace MVP
+
+**Last Updated:** October 28, 2025
 
 ## Overview
-SoukMatch is a Morocco-first bid/offer marketplace where buyers post jobs (transport, tours, B2B services, car financing) and providers submit competitive bids. The platform uses AI-assisted features for pricing guidance, offer scoring, and job structuring.
+SoukMatch is a Morocco-first marketplace web application where buyers post jobs (transport, tours, services, car financing) and service providers submit competitive bids. The platform features AI-assisted pricing, offer scoring, provider KYC verification, multi-language support (FR/AR/EN with RTL), messaging, and ratings functionality.
 
-## Current Status
-**Task 1: Schema & Frontend (In Progress)**
-- ✅ Complete PostgreSQL database schema with all entities
-- ✅ Design system configured with Morocco-themed colors (warm orange/terracotta primary, teal accent)
-- ✅ Comprehensive i18n support (FR/AR/EN) with RTL handling for Arabic
-- ✅ Context providers for app state, theme, and locale
-- ✅ Beautiful component library built with Shadcn UI
-- ✅ Complete user flows implemented:
-  - Home page with hero and category selection
-  - Multi-step job posting flow with AI structure preview
-  - Jobs listing with search and filtering
-  - Job detail page with real-time offer feed
-  - Offer cards with AI scoring visualization
-  - Provider signup with KYC document upload
-  - Messaging interface for buyer-provider communication
-- ✅ Responsive design with mobile-first approach
-- ✅ Dark mode support across all pages
-- ✅ Accessibility features (proper contrast, touch targets, ARIA labels)
+## Current Status: MVP Complete ✅
 
-**Next: Task 2 - Backend Implementation**
-**Then: Task 3 - Integration & Testing**
+### Implemented Features
+- ✅ Multi-step job posting flow (category → description → location/budget)
+- ✅ AI pricing bands and offer scoring (Morocco-specific heuristics)
+- ✅ Job listings with real-time offer counts
+- ✅ Provider signup with KYC placeholder (file upload UI ready)
+- ✅ Messaging interface (conversation-based)
+- ✅ Multilingual support (French, Arabic RTL, English)
+- ✅ Dark mode throughout
+- ✅ Responsive design for mobile/tablet/desktop
+- ✅ PostgreSQL database with complete schema
+- ✅ Comprehensive API endpoints
 
-## Tech Stack
+### Test Results
+- **End-to-End Test:** ✅ PASSED
+  - Job posting flow works correctly
+  - Job creation persists to database
+  - Redirect to job detail page functional
+  - Navigation between all pages working
+  - Toast notifications displaying properly
 
-### Frontend
-- React 18 with TypeScript
-- Wouter for routing
-- TanStack Query for data fetching
-- Shadcn UI + Tailwind CSS
-- date-fns for date formatting
+## Architecture
 
-### Backend (To Be Implemented)
-- Express.js API server
-- PostgreSQL with Drizzle ORM
-- AI pricing and scoring modules (heuristic-based)
-- WebSocket support for real-time offers
+### Database Schema (PostgreSQL + Drizzle ORM)
+- **users**: id (uuid), email, password, role (buyer/provider/admin), locale
+- **providers**: id (uuid), userId, displayName, city, rating, permits (jsonb), verified
+- **jobs**: id (uuid), buyerId, category, city, spec (jsonb), budgetHintMad, status
+- **offers**: id (uuid), jobId, providerId, priceMad, etaMin, aiScore, status, compliance
+- **messages**: id (uuid), jobId, senderId, body, createdAt
+- **ratings**: id (uuid), jobId, raterId, rateeId, score, comment
+- **financing_offers**: id (uuid), jobId, lenderId, apr, termMonths, monthlyPaymentMad
 
-### Database Schema
-- `users` - Buyers, providers, and admins with role-based access
-- `providers` - Provider profiles with KYC verification status
-- `jobs` - Transport, tour, service, and financing requests
-- `offers` - Provider bids with AI scoring
-- `financing_offers` - Car loan/lease broker flows
-- `messages` - In-job communication
-- `ratings` - Post-completion reviews
+### API Endpoints
 
-## Key Features
-1. **Multi-language Support**: French (default), Arabic (RTL), English
-2. **Category System**: Transport, Tours, Services, Financing
-3. **AI Assistance**: Job structuring, price bands, offer scoring
-4. **KYC Verification**: Provider verification with document upload
-5. **Real-time Offers**: Live offer streaming to buyers
-6. **Secure Messaging**: In-app communication
-7. **Rating System**: Post-job reviews for trust building
-8. **Morocco-Specific**: MAD currency, Moroccan cities, local compliance
+#### Authentication
+- `POST /api/auth/signup` - Create user account
+- `POST /api/auth/login` - Authenticate user
+- ⚠️ **Security Warning:** Uses plaintext passwords for MVP demo. Production requires bcrypt hashing.
 
-## Design Principles
-- **Trust Through Transparency**: Verification badges, ratings prominently displayed
-- **Effortless Comparison**: Clear offer cards with AI scores
-- **Cultural Sensitivity**: RTL support, trilingual UI, Morocco-centric imagery
-- **Progressive Disclosure**: Complex flows broken into digestible steps
+#### Jobs
+- `POST /api/jobs` - Create new job (with AI price band calculation)
+- `GET /api/jobs` - List open jobs
+- `GET /api/jobs?buyerId={id}` - Get jobs for specific buyer
+- `GET /api/jobs/:id` - Get job details
+- `POST /api/jobs/:id/cancel` - Cancel a job
 
-## User Roles
-- **Buyers**: Post jobs, receive offers, accept bids, rate providers
-- **Providers**: Submit offers, manage KYC, communicate with buyers
-- **Admin**: Review KYC, moderate content, manage platform (future)
+#### Offers
+- `GET /api/jobs/:id/offers` - List offers for a job (enriched with provider data)
+- `POST /api/jobs/:id/offers` - Submit offer (with AI scoring)
+- `POST /api/offers/:id/accept` - Accept offer (declines other offers automatically)
 
-## Development Guidelines
-- All text must be internationalized through i18n system
-- Use formatCurrency() for MAD amounts
-- Follow design guidelines in design_guidelines.md religiously
-- Maintain RTL compatibility for all layouts
-- Use existing Shadcn components (no custom recreations)
-- Implement proper loading and error states everywhere
+#### Providers
+- `POST /api/providers` - Create provider profile
+- `GET /api/providers/:id` - Get provider details
 
-## API Endpoints (To Be Built)
-- `POST /api/auth/signup`, `POST /api/auth/login`
-- `POST /api/jobs`, `GET /api/jobs/:id`, `GET /api/jobs`
-- `POST /api/jobs/:id/offers`, `GET /api/jobs/:id/offers`
-- `POST /api/offers/:id/accept`
-- `POST /api/providers`, `GET /api/providers/:id`
-- `POST /api/messages`, `GET /api/jobs/:id/messages`
-- `POST /api/ratings`
+#### Messaging
+- `GET /api/jobs/:id/messages` - Get messages for a job
+- `POST /api/messages` - Send message
+- `GET /api/messages/conversations` - List conversations for user
 
-## Environment Setup
-- DATABASE_URL: PostgreSQL connection string (already configured)
-- SESSION_SECRET: Session encryption key (already configured)
-- PORT: Server port (default 5000)
+#### Ratings & Financing
+- `POST /api/ratings` - Submit rating
+- `GET /api/financing/:jobId/offers` - Get financing offers
+- `POST /api/financing/prequal` - Pre-qualify for financing
+
+### AI Modules
+
+#### Pricing Band (`server/ai/pricing.ts`)
+Calculates fair price ranges based on:
+- City (Casablanca, Marrakech, Rabat, etc.)
+- Category (transport, tour, service, financing)
+- Distance (km)
+- Passenger count (pax)
+- Time of day/week
+
+#### Offer Scoring (`server/ai/scoring.ts`)
+Scores offers 0-1 based on:
+- Provider rating & verification status
+- Price fairness vs. band
+- ETA competitiveness
+- Compliance (permits, insurance)
+- Distance/fit for job requirements
+
+## Frontend Structure
+
+### Pages
+- `/` - Homepage with hero and CTA
+- `/post-job` - 3-step job posting wizard
+- `/jobs` - Job listings with filters
+- `/jobs/:id` - Job detail with offers
+- `/provider/signup` - Provider onboarding with KYC
+- `/messages` - Messaging interface
+
+### Key Components
+- `JobCard` - Job summary card with category icon, city, offer count
+- `OfferCard` - Provider offer with AI score visualization, price, ETA
+- `CategoryIcon` - Visual icons for transport/tour/service/financing
+- `Header` - Navigation with language switcher and theme toggle
+- `ProviderBadge` - Verification status display
+
+### Design System
+**Colors:**
+- Primary: Warm Orange (#D97706) - Moroccan warmth, trust
+- Accent: Teal (#14B8A6) - Modernity, reliability
+- Background: Adaptive light/dark mode
+- Text: 3-level hierarchy (default/secondary/tertiary)
+
+**Typography:**
+- System font stack for optimal performance
+- RTL support for Arabic
+
+**Spacing:**
+- Small: 0.5rem
+- Medium: 1rem
+- Large: 2rem
+
+## Known Limitations & TODOs
+
+### Security (CRITICAL for Production)
+```javascript
+// ⚠️ Current: Plaintext passwords
+password: 'unsafe_plaintext'
+
+// ✅ Production Required:
+npm install bcrypt @types/bcrypt
+const hashedPassword = await bcrypt.hash(password, 10);
+const isValid = await bcrypt.compare(password, user.password);
+```
+
+### Authentication
+- **Current:** Hard-coded buyer UUID (`80bc66ef-1602-4a00-9272-0aef66d83d3c`) for demo
+- **Required:** Implement JWT or session-based auth with `AppContext`
+- **Impact:** All users share same identity in current MVP
+
+### File Uploads
+- **Current:** KYC file upload UI exists but doesn't persist files
+- **Required:** Implement file storage (S3, Cloudinary, or Replit Object Storage)
+- **Impact:** Provider verification cannot be completed
+
+### Real-time Features
+- **Current:** REST API only
+- **Required:** WebSocket for live offer notifications
+- **Impact:** Buyers must refresh to see new offers
+
+### Production Readiness Gaps (from gap analysis)
+
+#### Non-functional Requirements
+- [ ] Performance SLOs: p95 latency < 300ms, uptime 99.5%
+- [ ] Rate limiting: 60 req/min per user, idempotency keys
+- [ ] Accessibility: WCAG 2.1 AA compliance
+- [ ] Offline support: retry/backoff, offline banners
+
+#### Security & Compliance
+- [ ] Threat model: fake KYC, collusion detection
+- [ ] RBAC & audit logging (immutable audit trail)
+- [ ] Data retention policy (chats 18mo, KYC 5yrs)
+- [ ] Legal packs: Terms, Privacy, Bank Al-Maghrib disclosure
+
+#### Trust & Safety
+- [ ] Disputes runbook with SLAs
+- [ ] Content moderation filters
+- [ ] Off-platform steering detection
+
+#### Payments & Escrow
+- [ ] PSP integration (pre-auth → capture → refund flow)
+- [ ] Idempotent webhooks
+- [ ] Chargeback handling
+
+#### AI/LLM Engineering
+- [ ] Prompt versioning + RAG
+- [ ] Fallback to heuristics when LLM unavailable
+- [ ] Bias checks for provider fairness
+- [ ] PII redaction in prompts
+
+#### Observability
+- [ ] Dashboards: latency, error rate, TTF-offer, win rate
+- [ ] Alerts: 5xx>1%, LLM fail>10%, payout failures
+- [ ] Cost guardrails and anomaly detection
+
+#### Data Model Hardening
+- [ ] Database indexes (composite on city+created_at)
+- [ ] PostGIS for proximity calculations
+- [ ] Audit tables for KYC/payout/role changes
+
+## Seed Data
+
+Test users and data available:
+- **Buyer:** ahmed@example.ma (ID: 80bc66ef-1602-4a00-9272-0aef66d83d3c)
+- **Buyer:** fatima@example.ma
+- **Provider:** transport@casablanca.ma (verified, 4.8★)
+- **Provider:** tours@marrakech.ma (verified, 4.9★)
+- **Provider:** service@rabat.ma (unverified, 4.5★)
+- **3 Jobs** with varying offers
+- **Sample messages** for conversation testing
+
+## Development Workflow
+
+### Running Locally
+```bash
+npm run dev  # Starts Express + Vite on port 5000
+```
+
+### Database Management
+```bash
+npm run db:push        # Push schema changes to PostgreSQL
+npx tsx server/seed.ts # Seed test data
+```
+
+### Accessing the App
+- **Frontend:** http://localhost:5000
+- **API:** http://localhost:5000/api/*
+- **Database:** PostgreSQL via DATABASE_URL env var
 
 ## Recent Changes
-- Created comprehensive database schema with all marketplace entities
-- Built complete frontend component library with i18n support
-- Implemented job posting, browsing, and offer viewing flows
-- Added provider KYC signup flow with document uploads
-- Created messaging interface for buyer-provider communication
-- Configured Morocco-themed design system with warm colors
-- Added dark mode support across entire application
+- **2025-10-28:** Fixed job creation redirect bug (JSON parsing)
+- **2025-10-28:** Fixed UUID validation errors (replaced 'demo-buyer' string)
+- **2025-10-28:** Added end-to-end test coverage - all tests passing
+- **2025-10-28:** Implemented complete API backend with AI modules
+- **2025-10-28:** Built full frontend with 6 pages and i18n support
 
 ## Next Steps
-1. Complete Task 1 with architect review
-2. Implement backend API endpoints and business logic
-3. Connect frontend to backend with proper state management
-4. Add WebSocket support for real-time offer updates
-5. Implement AI pricing and scoring algorithms
-6. Test complete user journeys end-to-end
+
+### Immediate (P0)
+1. Implement proper authentication (JWT/session)
+2. Add password hashing with bcrypt
+3. Wire auth context throughout app
+4. Implement file upload for KYC documents
+
+### Short-term (P1)
+5. Add WebSocket for real-time offer notifications
+6. Implement rate limiting and idempotency
+7. Add database indexes for performance
+8. Create admin panel for KYC verification
+
+### Medium-term (P2)
+9. Integrate payment provider (Stripe/local PSP)
+10. Add comprehensive logging and monitoring
+11. Implement dispute resolution workflow
+12. Content moderation system
+
+### Long-term (P3)
+13. Mobile app (React Native)
+14. Advanced AI features (actual LLM integration)
+15. Multi-city expansion tools
+16. Analytics dashboard
+
+## Contact & Support
+For questions or issues with this MVP, refer to:
+- API endpoints in `server/routes.ts`
+- Database schema in `shared/schema.ts`
+- Design guidelines in `design_guidelines.md`

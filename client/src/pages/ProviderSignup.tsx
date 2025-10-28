@@ -59,16 +59,17 @@ export default function ProviderSignup() {
         role: 'provider',
         locale,
       });
+      const userData = await userResponse.json();
 
       // Then create provider
       await apiRequest('POST', '/api/providers', {
-        userId: userResponse.user.id,
+        userId: userData.user.id,
         displayName: data.displayName,
         city: data.city,
         permits: { identity: true, permit: true, insurance: true }, // TODO: Upload actual files
       });
 
-      return userResponse;
+      return userData;
     },
     onSuccess: () => {
       toast({
