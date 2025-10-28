@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "@/lib/i18n";
 import { useApp } from "@/contexts/AppContext";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   Building2, CheckCircle2, FileText, Users, Wifi, 
-  Coffee, Car, Tv, MapPin, Star 
+  Coffee, Car, Tv, MapPin, Star, Palmtree, ArrowRight 
 } from "lucide-react";
 
 type Venue = {
@@ -44,6 +45,7 @@ type VenueRoom = {
 export default function MeetingsEvents() {
   const { locale } = useApp();
   const { t } = useTranslation(locale);
+  const [, setLocation] = useLocation();
   const [cityFilter, setCityFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [verifiedOnly, setVerifiedOnly] = useState(false);
@@ -151,6 +153,33 @@ export default function MeetingsEvents() {
                   {t('venue.invoice.ready')}
                 </Button>
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Bleisure Packages Promotion */}
+        <Card className="bg-gradient-to-r from-primary/10 to-accent/10 border-primary/20">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-primary/20 rounded-lg">
+                  <Palmtree className="w-8 h-8 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold mb-1">Combine Business with Leisure</h3>
+                  <p className="text-muted-foreground">
+                    Explore bleisure packages with integrated coworking spaces across Morocco
+                  </p>
+                </div>
+              </div>
+              <Button 
+                size="lg"
+                onClick={() => setLocation('/bleisure')}
+                data-testid="button-view-bleisure"
+              >
+                View Bleisure Packages
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Button>
             </div>
           </CardContent>
         </Card>
