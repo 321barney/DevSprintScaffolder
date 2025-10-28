@@ -83,7 +83,7 @@ export default function Favorites() {
     if (favorite.itemType === "provider") {
       setLocation(`/provider/${favorite.itemId}`);
     } else if (favorite.itemType === "service_package") {
-      setLocation(`/service-packages`);
+      setLocation(`/packages/${favorite.itemId}`);
     }
   };
 

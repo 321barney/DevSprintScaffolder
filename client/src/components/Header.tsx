@@ -7,7 +7,7 @@ import { useLocation } from 'wouter';
 import { useMutation } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Briefcase, LogOut, LogIn, UserPlus, Building2, Palmtree, BarChart3, Settings } from 'lucide-react';
+import { Plus, Briefcase, LogOut, LogIn, UserPlus, Building2, Palmtree, BarChart3, Settings, Package, Heart, ShoppingBag } from 'lucide-react';
 
 export function Header() {
   const { locale, currentUser, setCurrentUser } = useApp();
@@ -83,6 +83,34 @@ export function Header() {
                 data-testid="nav-jobs"
               >
                 {t('nav.jobs')}
+              </Button>
+              {currentUser.role === 'provider' && (
+                <Button
+                  variant={location.startsWith('/service-packages') ? 'secondary' : 'ghost'}
+                  onClick={() => setLocation('/service-packages')}
+                  data-testid="nav-packages"
+                >
+                  <Package className="w-4 h-4 mr-2" />
+                  Packages
+                </Button>
+              )}
+              {currentUser.role === 'buyer' && (
+                <Button
+                  variant={location.startsWith('/orders') ? 'secondary' : 'ghost'}
+                  onClick={() => setLocation('/orders')}
+                  data-testid="nav-orders"
+                >
+                  <ShoppingBag className="w-4 h-4 mr-2" />
+                  Orders
+                </Button>
+              )}
+              <Button
+                variant={location.startsWith('/favorites') ? 'secondary' : 'ghost'}
+                onClick={() => setLocation('/favorites')}
+                data-testid="nav-favorites"
+              >
+                <Heart className="w-4 h-4 mr-2" />
+                Favorites
               </Button>
               {currentUser.role === 'admin' && (
                 <Button

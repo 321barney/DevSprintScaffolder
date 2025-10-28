@@ -1,9 +1,9 @@
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useLocation, useParams } from "wouter";
 import { z } from "zod";
-import { insertServicePackageSchema } from "@shared/schema";
+import { insertServicePackageSchema, type ServicePackage } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -13,8 +13,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Package } from "lucide-react";
+import { useEffect } from "react";
 
 const formSchema = insertServicePackageSchema.extend({
   basicFeatures: z.array(z.string()).optional(),
@@ -24,7 +26,9 @@ const formSchema = insertServicePackageSchema.extend({
 
 export default function CreateServicePackage() {
   const [, setLocation] = useLocation();
+  const { id } = useParams();
   const { toast } = useToast();
+  const isEditMode = !!id;
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -53,6 +57,39 @@ export default function CreateServicePackage() {
     },
   });
 
+  const { data: packageData, isLoading: isLoadingPackage } = useQuery<ServicePackage>({
+    queryKey: [`/api/service-packages/${id}`],
+    enabled: isEditMode,
+  });
+
+  useEffect(() => {
+    if (packageData && isEditMode) {
+      form.reset({
+        category: packageData.category,
+        name: packageData.name,
+        description: packageData.description,
+        photoUrls: packageData.photoUrls || [],
+        basicTitle: packageData.basicTitle,
+        basicDescription: packageData.basicDescription || "",
+        basicPriceMad: packageData.basicPriceMad,
+        basicDeliveryDays: packageData.basicDeliveryDays,
+        basicFeatures: packageData.basicFeatures || [],
+        standardTitle: packageData.standardTitle || "Standard",
+        standardDescription: packageData.standardDescription || "",
+        standardPriceMad: packageData.standardPriceMad || undefined,
+        standardDeliveryDays: packageData.standardDeliveryDays || undefined,
+        standardFeatures: packageData.standardFeatures || [],
+        premiumTitle: packageData.premiumTitle || "Premium",
+        premiumDescription: packageData.premiumDescription || "",
+        premiumPriceMad: packageData.premiumPriceMad || undefined,
+        premiumDeliveryDays: packageData.premiumDeliveryDays || undefined,
+        premiumFeatures: packageData.premiumFeatures || [],
+        extras: packageData.extras || [],
+        active: packageData.active,
+      });
+    }
+  }, [packageData, isEditMode, form]);
+
   const createMutation = useMutation({
     mutationFn: (data: z.infer<typeof formSchema>) =>
       apiRequest("POST", "/api/service-packages", data),
@@ -73,19 +110,61 @@ export default function CreateServicePackage() {
     },
   });
 
+  const updateMutation = useMutation({
+    mutationFn: (data: z.infer<typeof formSchema>) =>
+      apiRequest("PATCH", `/api/service-packages/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/service-packages"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/service-packages/${id}`] });
+      toast({
+        title: "Success",
+        description: "Service package updated successfully!",
+      });
+      setLocation("/service-packages");
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const onSubmit = (data: z.infer<typeof formSchema>) => {
-    createMutation.mutate(data);
+    if (isEditMode) {
+      updateMutation.mutate(data);
+    } else {
+      createMutation.mutate(data);
+    }
   };
+
+  if (isEditMode && isLoadingPackage) {
+    return (
+      <div className="container mx-auto p-6 max-w-4xl">
+        <div className="mb-6">
+          <Skeleton className="h-10 w-96 mb-2" />
+          <Skeleton className="h-4 w-64" />
+        </div>
+        <div className="space-y-6">
+          <Skeleton className="h-64 w-full" />
+          <Skeleton className="h-96 w-full" />
+        </div>
+      </div>
+    );
+  }
+
+  const isPending = isEditMode ? updateMutation.isPending : createMutation.isPending;
 
   return (
     <div className="container mx-auto p-6 max-w-4xl">
       <div className="mb-6">
         <h1 className="text-3xl font-bold flex items-center gap-2" data-testid="text-page-title">
           <Package className="w-8 h-8" />
-          Create Service Package
+          {isEditMode ? "Edit Service Package" : "Create Service Package"}
         </h1>
         <p className="text-muted-foreground mt-1">
-          Build a Fiverr-style package with 3 pricing tiers
+          {isEditMode ? "Update your Fiverr-style package with 3 pricing tiers" : "Build a Fiverr-style package with 3 pricing tiers"}
         </p>
       </div>
 
@@ -141,7 +220,7 @@ export default function CreateServicePackage() {
                         name="category"
                         control={form.control}
                         render={({ field }) => (
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <Select onValueChange={field.onChange} value={field.value}>
                             <FormControl>
                               <SelectTrigger data-testid="select-category">
                                 <SelectValue placeholder="Select category" />
@@ -425,8 +504,8 @@ export default function CreateServicePackage() {
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={createMutation.isPending} data-testid="button-submit">
-              {createMutation.isPending ? "Creating..." : "Create Package"}
+            <Button type="submit" disabled={isPending} data-testid="button-submit">
+              {isPending ? (isEditMode ? "Updating..." : "Creating...") : (isEditMode ? "Update Package" : "Create Package")}
             </Button>
           </div>
         </form>

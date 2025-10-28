@@ -1,13 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useApp } from "@/contexts/AppContext";
 import { useTranslation } from "@/lib/i18n";
-import { MapPin, Star, Shield, Globe, ArrowLeft } from "lucide-react";
+import { MapPin, Star, Shield, Globe, ArrowLeft, Package, Clock, DollarSign } from "lucide-react";
+import type { ServicePackage } from "@shared/schema";
 
 interface Provider {
   id: string;
@@ -37,6 +38,11 @@ export default function ProviderDetail() {
 
   const { data: provider, isLoading } = useQuery<Provider>({
     queryKey: [`/api/providers/${id}`],
+  });
+
+  const { data: packages, isLoading: isLoadingPackages } = useQuery<ServicePackage[]>({
+    queryKey: [`/api/providers/${id}/packages`],
+    enabled: !!id,
   });
 
   if (isLoading) {
@@ -146,6 +152,121 @@ export default function ProviderDetail() {
             <p className="text-muted-foreground">{bio}</p>
           </CardContent>
         </Card>
+
+        {/* Service Packages */}
+        {isLoadingPackages ? (
+          <div className="space-y-4">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-64 w-full" />
+          </div>
+        ) : packages && packages.length > 0 ? (
+          <div>
+            <h2 className="text-2xl font-semibold mb-4 flex items-center gap-2" data-testid="text-packages-title">
+              <Package className="w-6 h-6" />
+              Service Packages
+            </h2>
+            <div className="space-y-6">
+              {packages.map((pkg) => (
+                <Card key={pkg.id} data-testid={`card-package-${pkg.id}`}>
+                  <CardHeader>
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <CardTitle className="text-xl mb-1">{pkg.name}</CardTitle>
+                        <CardDescription>{pkg.description}</CardDescription>
+                      </div>
+                      <Badge variant={pkg.active ? "default" : "secondary"}>
+                        {pkg.active ? "Active" : "Inactive"}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid gap-4 md:grid-cols-3">
+                      {/* Basic Tier */}
+                      <div className="border rounded-xl bg-card text-card-foreground p-6 space-y-4">
+                        <div className="space-y-1">
+                          <h3 className="text-lg font-semibold">{pkg.basicTitle}</h3>
+                          <p className="text-sm text-muted-foreground line-clamp-2">{pkg.basicDescription}</p>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-2xl font-bold">
+                            <DollarSign className="w-5 h-5" />
+                            {pkg.basicPriceMad} MAD
+                          </div>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Clock className="w-4 h-4" />
+                            {pkg.basicDeliveryDays} {pkg.basicDeliveryDays === 1 ? 'day' : 'days'} delivery
+                          </div>
+                        </div>
+                        <Button 
+                          className="w-full"
+                          onClick={() => setLocation(`/packages/${pkg.id}`)}
+                          data-testid={`button-order-basic-${pkg.id}`}
+                        >
+                          View Details
+                        </Button>
+                      </div>
+
+                      {/* Standard Tier */}
+                      {pkg.standardPriceMad && (
+                        <div className="border border-primary rounded-xl bg-card text-card-foreground p-6 space-y-4">
+                          <div className="space-y-1">
+                            <h3 className="text-lg font-semibold">{pkg.standardTitle}</h3>
+                            <p className="text-sm text-muted-foreground line-clamp-2">{pkg.standardDescription}</p>
+                          </div>
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2 text-2xl font-bold">
+                              <DollarSign className="w-5 h-5" />
+                              {pkg.standardPriceMad} MAD
+                            </div>
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <Clock className="w-4 h-4" />
+                              {pkg.standardDeliveryDays} {pkg.standardDeliveryDays === 1 ? 'day' : 'days'} delivery
+                            </div>
+                          </div>
+                          <Button 
+                            className="w-full"
+                            variant="default"
+                            onClick={() => setLocation(`/packages/${pkg.id}`)}
+                            data-testid={`button-order-standard-${pkg.id}`}
+                          >
+                            View Details
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* Premium Tier */}
+                      {pkg.premiumPriceMad && (
+                        <div className="border rounded-xl bg-card text-card-foreground p-6 space-y-4">
+                          <div className="space-y-1">
+                            <h3 className="text-lg font-semibold">{pkg.premiumTitle}</h3>
+                            <p className="text-sm text-muted-foreground line-clamp-2">{pkg.premiumDescription}</p>
+                          </div>
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2 text-2xl font-bold">
+                              <DollarSign className="w-5 h-5" />
+                              {pkg.premiumPriceMad} MAD
+                            </div>
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <Clock className="w-4 h-4" />
+                              {pkg.premiumDeliveryDays} {pkg.premiumDeliveryDays === 1 ? 'day' : 'days'} delivery
+                            </div>
+                          </div>
+                          <Button 
+                            className="w-full"
+                            onClick={() => setLocation(`/packages/${pkg.id}`)}
+                            data-testid={`button-order-premium-${pkg.id}`}
+                          >
+                            View Details
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         {/* Portfolio */}
         {provider.profile?.portfolioPhotos && provider.profile.portfolioPhotos.length > 0 && (
