@@ -1,7 +1,7 @@
 # Trip2work - Morocco Tourism & Service Platform
 
 ## Overview
-Trip2work is a Morocco-focused tourism and service platform connecting tourists and buyers with verified service providers (transport, tours, handymen, guides). It enables providers to build their brand through public profiles and portfolios. Key features include an interactive map-based marketplace, GPS tracking, AI-assisted pricing, photo uploads, and multi-language support (FR/AR/EN with RTL). The platform now supports B2B/MICE (Meetings, Incentives, Conferences & Events) with corporate workspaces, venue management, RFP workflows, group bookings, and enterprise invoicing. The platform monetizes through a commission system and subscription tiers for providers.
+Trip2work is a Morocco-focused tourism and service platform connecting tourists and buyers with verified service providers (transport, tours, handymen, guides). It enables providers to build their brand through public profiles and portfolios. Key features include an interactive map-based marketplace, GPS tracking, AI-assisted pricing, photo uploads, and multi-language support (FR/AR/EN with RTL). The platform supports comprehensive B2B/MICE capabilities including bleisure packages, coworking spaces, corporate workspaces, venue management, RFP workflows, advanced analytics (savings attribution, cohort LTV), HRIS sync (Workday, BambooHR, ADP), SSO (SAML/OAuth2/OIDC), and enterprise features. The platform monetizes through a commission system and subscription tiers for providers.
 
 ## User Preferences
 No specific user preferences were provided in the original document.
@@ -29,7 +29,18 @@ No specific user preferences were provided in the original document.
 - **Provider Profiles**: Public profiles with photos, portfolios, and verified credentials.
 - **Subscription Tiers**: Starter, Professional, Fleet with varying offer limits and commission rates.
 - **Private Messaging**: Accessible via job details only.
-- **B2B/MICE Features**:
+- **Bleisure & Coworking** (Phase 6):
+  - **Bleisure Packages**: Combined business and leisure travel packages with coworking space integration
+  - **Coworking Spaces**: Verified workspace listings with hourly/daily/monthly rates, meeting rooms, prayer rooms, high-speed internet
+  - **Bleisure Bookings**: Package reservations with participant tracking and payment management
+- **Advanced Analytics v2** (Phase 6):
+  - **Savings Attribution**: Track cost savings by category (negotiated rates, early booking, volume discounts, bleisure, consolidation)
+  - **Cohort Analysis**: Customer lifetime value tracking by company size, industry, geography, acquisition channel with monthly retention and churn rates
+- **HRIS & SSO Integration** (Phase 6):
+  - **HRIS Sync**: Automated employee data synchronization from Workday, BambooHR, ADP, Gusto, Rippling, Personio
+  - **SSO Connections**: Single Sign-On via SAML, OAuth2, OIDC with Okta, Azure AD, Google Workspace, OneLogin, Auth0
+  - **Employee Sync Logs**: Detailed tracking of sync operations with success/failure metrics
+- **B2B/MICE Features** (Phases 1-5):
   - **Venue Marketplace**: Browse venues with filters (city, type, verified, invoice-ready), venue details with rooms, capacity, amenities.
   - **RFP Workflow**: Create RFPs, submit quotes, compare quotes side-by-side.
   - **Corporate Workspace**: Company accounts, cost centers, traveler profiles, approval workflows.
@@ -56,6 +67,7 @@ No specific user preferences were provided in the original document.
     - **MICE/B2B Tables**: `companies`, `cost_centers`, `traveler_profiles`, `venues`, `venue_rooms`, `rfps`, `quotes`, `group_bookings`, `approvals`.
     - **Advanced MICE Tables**: `partner_tiers`, `corporate_rates`, `milestone_payments`, `event_reports`, `itineraries`, `disruption_alerts`, `dmc_partners`.
     - **Phase 5 Enhancement Tables**: `notification_preferences`, `notification_history`, `virtual_cards`, `expense_entries`, `sustainability_metrics`, `quality_audits`, `post_event_nps`, `fam_trips`, `fam_trip_registrations`.
+    - **Phase 6 Tables**: `bleisure_packages`, `coworking_spaces`, `bleisure_bookings`, `savings_attributions`, `cohort_analyses`, `hris_sync_configs`, `sso_connections`, `employee_sync_logs`.
 - **API Endpoints**:
     - **Authentication**: `POST /api/auth/signup`, `POST /api/auth/login`.
     - **Jobs**: `POST /api/jobs`, `GET /api/jobs`, `GET /api/jobs/:id`, `POST /api/jobs/:id/cancel`.
@@ -78,6 +90,9 @@ No specific user preferences were provided in the original document.
     - **Phase 5 - Quality**: `GET /api/quality-audits`, `POST /api/quality-audits`, `GET /api/post-event-nps`, `POST /api/post-event-nps`.
     - **Phase 5 - FAM Trips**: `GET /api/fam-trips`, `POST /api/fam-trips`, `GET /api/fam-trips/:id`, `PATCH /api/fam-trips/:id`, `GET /api/fam-trip-registrations`, `POST /api/fam-trip-registrations`, `PATCH /api/fam-trip-registrations/:id`.
     - **Phase 5 - SEO & Calendar**: `GET /api/seo/meeting-rooms/:city`, `GET /api/group-bookings/:id/calendar`.
+    - **Phase 6 - Bleisure**: `GET /api/bleisure-packages`, `POST /api/bleisure-packages`, `GET /api/bleisure-packages/:id`, `PATCH /api/bleisure-packages/:id`, `GET /api/coworking-spaces`, `POST /api/coworking-spaces`, `GET /api/coworking-spaces/:id`, `PATCH /api/coworking-spaces/:id`, `GET /api/bleisure-bookings`, `POST /api/bleisure-bookings`, `GET /api/bleisure-bookings/:id`, `PATCH /api/bleisure-bookings/:id`.
+    - **Phase 6 - Analytics**: `GET /api/savings-attributions`, `POST /api/savings-attributions`, `GET /api/savings-attributions/:id`, `GET /api/cohort-analyses`, `POST /api/cohort-analyses`, `GET /api/cohort-analyses/:id`.
+    - **Phase 6 - HRIS/SSO**: `GET /api/hris-sync-configs`, `POST /api/hris-sync-configs`, `GET /api/hris-sync-configs/:id`, `PATCH /api/hris-sync-configs/:id`, `GET /api/sso-connections`, `POST /api/sso-connections`, `GET /api/sso-connections/:id`, `PATCH /api/sso-connections/:id`, `GET /api/employee-sync-logs`, `POST /api/employee-sync-logs`, `GET /api/employee-sync-logs/:id`, `PATCH /api/employee-sync-logs/:id`.
 - **AI Modules**:
     - **Pricing Band**: `server/ai/pricing.ts` calculates price ranges based on city, category, distance, passengers, and time.
     - **Offer Scoring**: `server/ai/scoring.ts` scores offers based on provider rating, price fairness, ETA, compliance, and job fit.

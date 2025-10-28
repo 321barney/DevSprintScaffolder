@@ -7,6 +7,8 @@ import {
   partnerTiers, corporateRates, milestonePayments, eventReports, itineraries, disruptionAlerts, dmcPartners,
   notificationPreferences, notificationHistory, virtualCards, expenseEntries, sustainabilityMetrics,
   qualityAudits, postEventNps, famTrips, famTripRegistrations,
+  bleisurePackages, coworkingSpaces, bleisureBookings, savingsAttributions, cohortAnalyses,
+  hrisSyncConfigs, ssoConnections, employeeSyncLogs,
   type User, type InsertUser,
   type Provider, type InsertProvider,
   type Job, type InsertJob,
@@ -48,9 +50,17 @@ import {
   type PostEventNps, type InsertPostEventNps,
   type FamTrip, type InsertFamTrip,
   type FamTripRegistration, type InsertFamTripRegistration,
+  type BleisurePackage, type InsertBleisurePackage,
+  type CoworkingSpace, type InsertCoworkingSpace,
+  type BleisureBooking, type InsertBleisureBooking,
+  type SavingsAttribution, type InsertSavingsAttribution,
+  type CohortAnalysis, type InsertCohortAnalysis,
+  type HrisSyncConfig, type InsertHrisSyncConfig,
+  type SsoConnection, type InsertSsoConnection,
+  type EmployeeSyncLog, type InsertEmployeeSyncLog,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, gte, lte } from "drizzle-orm";
 
 // Storage interface for all CRUD operations
 export interface IStorage {
@@ -1321,6 +1331,190 @@ export class DatabaseStorage implements IStorage {
   async updateFamTripRegistration(id: string, data: Partial<FamTripRegistration>): Promise<FamTripRegistration | undefined> {
     const [registration] = await db.update(famTripRegistrations).set(data as any).where(eq(famTripRegistrations.id, id)).returning();
     return registration || undefined;
+  }
+
+  // === PHASE 6: Bleisure, Analytics, HRIS/SSO ===
+
+  // Bleisure Packages
+  async getBleisurePackage(id: string): Promise<BleisurePackage | undefined> {
+    const [pkg] = await db.select().from(bleisurePackages).where(eq(bleisurePackages.id, id));
+    return pkg || undefined;
+  }
+
+  async getBleisurePackagesByCity(city: string): Promise<BleisurePackage[]> {
+    return await db.select().from(bleisurePackages).where(eq(bleisurePackages.city, city)).orderBy(bleisurePackages.pricePerPersonMad);
+  }
+
+  async getBleisurePackagesByProviderId(providerId: string): Promise<BleisurePackage[]> {
+    return await db.select().from(bleisurePackages).where(eq(bleisurePackages.providerId, providerId)).orderBy(desc(bleisurePackages.createdAt));
+  }
+
+  async getActiveBleisurePackages(): Promise<BleisurePackage[]> {
+    return await db.select().from(bleisurePackages).where(eq(bleisurePackages.status, "active")).orderBy(bleisurePackages.pricePerPersonMad);
+  }
+
+  async createBleisurePackage(insertPkg: InsertBleisurePackage): Promise<BleisurePackage> {
+    const [pkg] = await db.insert(bleisurePackages).values(insertPkg as any).returning();
+    return pkg;
+  }
+
+  async updateBleisurePackage(id: string, data: Partial<BleisurePackage>): Promise<BleisurePackage | undefined> {
+    const [pkg] = await db.update(bleisurePackages).set(data as any).where(eq(bleisurePackages.id, id)).returning();
+    return pkg || undefined;
+  }
+
+  // Coworking Spaces
+  async getCoworkingSpace(id: string): Promise<CoworkingSpace | undefined> {
+    const [space] = await db.select().from(coworkingSpaces).where(eq(coworkingSpaces.id, id));
+    return space || undefined;
+  }
+
+  async getCoworkingSpacesByCity(city: string): Promise<CoworkingSpace[]> {
+    return await db.select().from(coworkingSpaces).where(eq(coworkingSpaces.city, city)).orderBy(desc(coworkingSpaces.rating));
+  }
+
+  async getVerifiedCoworkingSpaces(): Promise<CoworkingSpace[]> {
+    return await db.select().from(coworkingSpaces).where(eq(coworkingSpaces.verified, true)).orderBy(desc(coworkingSpaces.rating));
+  }
+
+  async createCoworkingSpace(insertSpace: InsertCoworkingSpace): Promise<CoworkingSpace> {
+    const [space] = await db.insert(coworkingSpaces).values(insertSpace as any).returning();
+    return space;
+  }
+
+  async updateCoworkingSpace(id: string, data: Partial<CoworkingSpace>): Promise<CoworkingSpace | undefined> {
+    const [space] = await db.update(coworkingSpaces).set(data as any).where(eq(coworkingSpaces.id, id)).returning();
+    return space || undefined;
+  }
+
+  // Bleisure Bookings
+  async getBleisureBooking(id: string): Promise<BleisureBooking | undefined> {
+    const [booking] = await db.select().from(bleisureBookings).where(eq(bleisureBookings.id, id));
+    return booking || undefined;
+  }
+
+  async getBleisureBookingsByUserId(userId: string): Promise<BleisureBooking[]> {
+    return await db.select().from(bleisureBookings).where(eq(bleisureBookings.userId, userId)).orderBy(desc(bleisureBookings.createdAt));
+  }
+
+  async getBleisureBookingsByCompanyId(companyId: string): Promise<BleisureBooking[]> {
+    return await db.select().from(bleisureBookings).where(eq(bleisureBookings.companyId, companyId)).orderBy(desc(bleisureBookings.createdAt));
+  }
+
+  async createBleisureBooking(insertBooking: InsertBleisureBooking): Promise<BleisureBooking> {
+    const [booking] = await db.insert(bleisureBookings).values(insertBooking as any).returning();
+    return booking;
+  }
+
+  async updateBleisureBooking(id: string, data: Partial<BleisureBooking>): Promise<BleisureBooking | undefined> {
+    const [booking] = await db.update(bleisureBookings).set(data as any).where(eq(bleisureBookings.id, id)).returning();
+    return booking || undefined;
+  }
+
+  // Savings Attributions
+  async getSavingsAttribution(id: string): Promise<SavingsAttribution | undefined> {
+    const [saving] = await db.select().from(savingsAttributions).where(eq(savingsAttributions.id, id));
+    return saving || undefined;
+  }
+
+  async getSavingsAttributionsByCompanyId(companyId: string): Promise<SavingsAttribution[]> {
+    return await db.select().from(savingsAttributions).where(eq(savingsAttributions.companyId, companyId)).orderBy(desc(savingsAttributions.periodEnd));
+  }
+
+  async getSavingsAttributionsByPeriod(companyId: string, start: Date, end: Date): Promise<SavingsAttribution[]> {
+    return await db.select().from(savingsAttributions)
+      .where(and(
+        eq(savingsAttributions.companyId, companyId),
+        gte(savingsAttributions.periodStart, start),
+        lte(savingsAttributions.periodEnd, end)
+      ))
+      .orderBy(desc(savingsAttributions.periodEnd));
+  }
+
+  async createSavingsAttribution(insertSaving: InsertSavingsAttribution): Promise<SavingsAttribution> {
+    const [saving] = await db.insert(savingsAttributions).values(insertSaving as any).returning();
+    return saving;
+  }
+
+  // Cohort Analyses
+  async getCohortAnalysis(id: string): Promise<CohortAnalysis | undefined> {
+    const [cohort] = await db.select().from(cohortAnalyses).where(eq(cohortAnalyses.id, id));
+    return cohort || undefined;
+  }
+
+  async getCohortAnalysesByType(cohortType: string): Promise<CohortAnalysis[]> {
+    return await db.select().from(cohortAnalyses).where(eq(cohortAnalyses.cohortType, cohortType as any)).orderBy(cohortAnalyses.cohortMonth);
+  }
+
+  async getCohortAnalysesByMonth(cohortMonth: string): Promise<CohortAnalysis[]> {
+    return await db.select().from(cohortAnalyses).where(eq(cohortAnalyses.cohortMonth, cohortMonth)).orderBy(cohortAnalyses.cohortType);
+  }
+
+  async createCohortAnalysis(insertCohort: InsertCohortAnalysis): Promise<CohortAnalysis> {
+    const [cohort] = await db.insert(cohortAnalyses).values(insertCohort as any).returning();
+    return cohort;
+  }
+
+  // HRIS Sync Configs
+  async getHrisSyncConfig(id: string): Promise<HrisSyncConfig | undefined> {
+    const [config] = await db.select().from(hrisSyncConfigs).where(eq(hrisSyncConfigs.id, id));
+    return config || undefined;
+  }
+
+  async getHrisSyncConfigByCompanyId(companyId: string): Promise<HrisSyncConfig | undefined> {
+    const [config] = await db.select().from(hrisSyncConfigs).where(eq(hrisSyncConfigs.companyId, companyId));
+    return config || undefined;
+  }
+
+  async createHrisSyncConfig(insertConfig: InsertHrisSyncConfig): Promise<HrisSyncConfig> {
+    const [config] = await db.insert(hrisSyncConfigs).values(insertConfig as any).returning();
+    return config;
+  }
+
+  async updateHrisSyncConfig(id: string, data: Partial<HrisSyncConfig>): Promise<HrisSyncConfig | undefined> {
+    const [config] = await db.update(hrisSyncConfigs).set(data as any).where(eq(hrisSyncConfigs.id, id)).returning();
+    return config || undefined;
+  }
+
+  // SSO Connections
+  async getSsoConnection(id: string): Promise<SsoConnection | undefined> {
+    const [connection] = await db.select().from(ssoConnections).where(eq(ssoConnections.id, id));
+    return connection || undefined;
+  }
+
+  async getSsoConnectionByCompanyId(companyId: string): Promise<SsoConnection | undefined> {
+    const [connection] = await db.select().from(ssoConnections).where(eq(ssoConnections.companyId, companyId));
+    return connection || undefined;
+  }
+
+  async createSsoConnection(insertConnection: InsertSsoConnection): Promise<SsoConnection> {
+    const [connection] = await db.insert(ssoConnections).values(insertConnection as any).returning();
+    return connection;
+  }
+
+  async updateSsoConnection(id: string, data: Partial<SsoConnection>): Promise<SsoConnection | undefined> {
+    const [connection] = await db.update(ssoConnections).set(data as any).where(eq(ssoConnections.id, id)).returning();
+    return connection || undefined;
+  }
+
+  // Employee Sync Logs
+  async getEmployeeSyncLog(id: string): Promise<EmployeeSyncLog | undefined> {
+    const [log] = await db.select().from(employeeSyncLogs).where(eq(employeeSyncLogs.id, id));
+    return log || undefined;
+  }
+
+  async getEmployeeSyncLogsBySyncConfigId(syncConfigId: string): Promise<EmployeeSyncLog[]> {
+    return await db.select().from(employeeSyncLogs).where(eq(employeeSyncLogs.syncConfigId, syncConfigId)).orderBy(desc(employeeSyncLogs.createdAt));
+  }
+
+  async createEmployeeSyncLog(insertLog: InsertEmployeeSyncLog): Promise<EmployeeSyncLog> {
+    const [log] = await db.insert(employeeSyncLogs).values(insertLog as any).returning();
+    return log;
+  }
+
+  async updateEmployeeSyncLog(id: string, data: Partial<EmployeeSyncLog>): Promise<EmployeeSyncLog | undefined> {
+    const [log] = await db.update(employeeSyncLogs).set(data as any).where(eq(employeeSyncLogs.id, id)).returning();
+    return log || undefined;
   }
 }
 

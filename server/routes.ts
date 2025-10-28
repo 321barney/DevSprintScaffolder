@@ -19,7 +19,10 @@ import {
   insertEventReportSchema, insertItinerarySchema, insertDisruptionAlertSchema, insertDmcPartnerSchema,
   insertNotificationPreferenceSchema, insertVirtualCardSchema, insertExpenseEntrySchema,
   insertSustainabilityMetricSchema, insertQualityAuditSchema, insertPostEventNpsSchema,
-  insertFamTripSchema, insertFamTripRegistrationSchema
+  insertFamTripSchema, insertFamTripRegistrationSchema,
+  insertBleisurePackageSchema, insertCoworkingSpaceSchema, insertBleisureBookingSchema,
+  insertSavingsAttributionSchema, insertCohortAnalysisSchema, insertHrisSyncConfigSchema,
+  insertSsoConnectionSchema, insertEmployeeSyncLogSchema
 } from "@shared/schema";
 import { z } from "zod";
 
@@ -1788,6 +1791,295 @@ END:VCALENDAR`;
     res.setHeader('Content-Type', 'text/calendar');
     res.setHeader('Content-Disposition', `attachment; filename="booking-${booking.id}.ics"`);
     res.send(icsContent);
+  }));
+
+  // === PHASE 6: Bleisure, Advanced Analytics, HRIS/SSO ===
+
+  // Bleisure Packages Routes
+  app.get("/api/bleisure-packages", asyncHandler(async (req, res) => {
+    const { city, providerId, status } = req.query;
+    
+    if (city) {
+      const packages = await storage.getBleisurePackagesByCity(city as string);
+      return res.json(packages);
+    }
+    
+    if (providerId) {
+      const packages = await storage.getBleisurePackagesByProviderId(providerId as string);
+      return res.json(packages);
+    }
+    
+    if (status === 'active' || !status) {
+      const packages = await storage.getActiveBleisurePackages();
+      return res.json(packages);
+    }
+    
+    res.json([]);
+  }));
+
+  app.get("/api/bleisure-packages/:id", asyncHandler(async (req, res) => {
+    const pkg = await storage.getBleisurePackage(req.params.id);
+    if (!pkg) {
+      return res.status(404).json({ error: "Bleisure package not found" });
+    }
+    res.json(pkg);
+  }));
+
+  app.post("/api/bleisure-packages", requireAuth, requireRole('provider'), asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const provider = await storage.getProviderByUserId(userId);
+    if (!provider) {
+      return res.status(403).json({ error: "Provider profile required" });
+    }
+    
+    const validatedData = insertBleisurePackageSchema.parse({ ...req.body, providerId: provider.id });
+    const pkg = await storage.createBleisurePackage(validatedData);
+    res.json(pkg);
+  }));
+
+  app.patch("/api/bleisure-packages/:id", requireAuth, requireRole('provider'), asyncHandler(async (req, res) => {
+    const pkg = await storage.updateBleisurePackage(req.params.id, req.body);
+    res.json(pkg);
+  }));
+
+  // Coworking Spaces Routes
+  app.get("/api/coworking-spaces", asyncHandler(async (req, res) => {
+    const { city, verified } = req.query;
+    
+    if (city) {
+      const spaces = await storage.getCoworkingSpacesByCity(city as string);
+      return res.json(spaces);
+    }
+    
+    if (verified === 'true') {
+      const spaces = await storage.getVerifiedCoworkingSpaces();
+      return res.json(spaces);
+    }
+    
+    res.json([]);
+  }));
+
+  app.get("/api/coworking-spaces/:id", asyncHandler(async (req, res) => {
+    const space = await storage.getCoworkingSpace(req.params.id);
+    if (!space) {
+      return res.status(404).json({ error: "Coworking space not found" });
+    }
+    res.json(space);
+  }));
+
+  app.post("/api/coworking-spaces", requireAuth, requireRole('provider'), asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const provider = await storage.getProviderByUserId(userId);
+    if (!provider) {
+      return res.status(403).json({ error: "Provider profile required" });
+    }
+    
+    const validatedData = insertCoworkingSpaceSchema.parse({ ...req.body, providerId: provider.id });
+    const space = await storage.createCoworkingSpace(validatedData);
+    res.json(space);
+  }));
+
+  app.patch("/api/coworking-spaces/:id", requireAuth, requireRole('provider'), asyncHandler(async (req, res) => {
+    const space = await storage.updateCoworkingSpace(req.params.id, req.body);
+    res.json(space);
+  }));
+
+  // Bleisure Bookings Routes
+  app.get("/api/bleisure-bookings", requireAuth, asyncHandler(async (req, res) => {
+    const { userId, companyId } = req.query;
+    
+    if (userId) {
+      const bookings = await storage.getBleisureBookingsByUserId(userId as string);
+      return res.json(bookings);
+    }
+    
+    if (companyId) {
+      const bookings = await storage.getBleisureBookingsByCompanyId(companyId as string);
+      return res.json(bookings);
+    }
+    
+    const myBookings = await storage.getBleisureBookingsByUserId(req.session.userId!);
+    res.json(myBookings);
+  }));
+
+  app.get("/api/bleisure-bookings/:id", requireAuth, asyncHandler(async (req, res) => {
+    const booking = await storage.getBleisureBooking(req.params.id);
+    if (!booking) {
+      return res.status(404).json({ error: "Bleisure booking not found" });
+    }
+    res.json(booking);
+  }));
+
+  app.post("/api/bleisure-bookings", requireAuth, asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const validatedData = insertBleisureBookingSchema.parse({ ...req.body, userId });
+    const booking = await storage.createBleisureBooking(validatedData);
+    res.json(booking);
+  }));
+
+  app.patch("/api/bleisure-bookings/:id", requireAuth, asyncHandler(async (req, res) => {
+    const booking = await storage.updateBleisureBooking(req.params.id, req.body);
+    res.json(booking);
+  }));
+
+  // Savings Attributions Routes
+  app.get("/api/savings-attributions", requireAuth, asyncHandler(async (req, res) => {
+    const { companyId, periodStart, periodEnd } = req.query;
+    
+    if (!companyId) {
+      return res.status(400).json({ error: "companyId is required" });
+    }
+    
+    if (periodStart && periodEnd) {
+      const savings = await storage.getSavingsAttributionsByPeriod(
+        companyId as string,
+        new Date(periodStart as string),
+        new Date(periodEnd as string)
+      );
+      return res.json(savings);
+    }
+    
+    const savings = await storage.getSavingsAttributionsByCompanyId(companyId as string);
+    res.json(savings);
+  }));
+
+  app.get("/api/savings-attributions/:id", requireAuth, asyncHandler(async (req, res) => {
+    const saving = await storage.getSavingsAttribution(req.params.id);
+    if (!saving) {
+      return res.status(404).json({ error: "Savings attribution not found" });
+    }
+    res.json(saving);
+  }));
+
+  app.post("/api/savings-attributions", requireAuth, asyncHandler(async (req, res) => {
+    const validatedData = insertSavingsAttributionSchema.parse(req.body);
+    const saving = await storage.createSavingsAttribution(validatedData);
+    res.json(saving);
+  }));
+
+  // Cohort Analyses Routes
+  app.get("/api/cohort-analyses", requireAuth, requireRole('admin'), asyncHandler(async (req, res) => {
+    const { cohortType, cohortMonth } = req.query;
+    
+    if (cohortType) {
+      const cohorts = await storage.getCohortAnalysesByType(cohortType as string);
+      return res.json(cohorts);
+    }
+    
+    if (cohortMonth) {
+      const cohorts = await storage.getCohortAnalysesByMonth(cohortMonth as string);
+      return res.json(cohorts);
+    }
+    
+    res.json([]);
+  }));
+
+  app.get("/api/cohort-analyses/:id", requireAuth, requireRole('admin'), asyncHandler(async (req, res) => {
+    const cohort = await storage.getCohortAnalysis(req.params.id);
+    if (!cohort) {
+      return res.status(404).json({ error: "Cohort analysis not found" });
+    }
+    res.json(cohort);
+  }));
+
+  app.post("/api/cohort-analyses", requireAuth, requireRole('admin'), asyncHandler(async (req, res) => {
+    const validatedData = insertCohortAnalysisSchema.parse(req.body);
+    const cohort = await storage.createCohortAnalysis(validatedData);
+    res.json(cohort);
+  }));
+
+  // HRIS Sync Configs Routes
+  app.get("/api/hris-sync-configs", requireAuth, asyncHandler(async (req, res) => {
+    const { companyId } = req.query;
+    
+    if (!companyId) {
+      return res.status(400).json({ error: "companyId is required" });
+    }
+    
+    const config = await storage.getHrisSyncConfigByCompanyId(companyId as string);
+    res.json(config || null);
+  }));
+
+  app.get("/api/hris-sync-configs/:id", requireAuth, asyncHandler(async (req, res) => {
+    const config = await storage.getHrisSyncConfig(req.params.id);
+    if (!config) {
+      return res.status(404).json({ error: "HRIS sync config not found" });
+    }
+    res.json(config);
+  }));
+
+  app.post("/api/hris-sync-configs", requireAuth, asyncHandler(async (req, res) => {
+    const validatedData = insertHrisSyncConfigSchema.parse(req.body);
+    const config = await storage.createHrisSyncConfig(validatedData);
+    res.json(config);
+  }));
+
+  app.patch("/api/hris-sync-configs/:id", requireAuth, asyncHandler(async (req, res) => {
+    const config = await storage.updateHrisSyncConfig(req.params.id, req.body);
+    res.json(config);
+  }));
+
+  // SSO Connections Routes
+  app.get("/api/sso-connections", requireAuth, asyncHandler(async (req, res) => {
+    const { companyId } = req.query;
+    
+    if (!companyId) {
+      return res.status(400).json({ error: "companyId is required" });
+    }
+    
+    const connection = await storage.getSsoConnectionByCompanyId(companyId as string);
+    res.json(connection || null);
+  }));
+
+  app.get("/api/sso-connections/:id", requireAuth, asyncHandler(async (req, res) => {
+    const connection = await storage.getSsoConnection(req.params.id);
+    if (!connection) {
+      return res.status(404).json({ error: "SSO connection not found" });
+    }
+    res.json(connection);
+  }));
+
+  app.post("/api/sso-connections", requireAuth, asyncHandler(async (req, res) => {
+    const validatedData = insertSsoConnectionSchema.parse(req.body);
+    const connection = await storage.createSsoConnection(validatedData);
+    res.json(connection);
+  }));
+
+  app.patch("/api/sso-connections/:id", requireAuth, asyncHandler(async (req, res) => {
+    const connection = await storage.updateSsoConnection(req.params.id, req.body);
+    res.json(connection);
+  }));
+
+  // Employee Sync Logs Routes
+  app.get("/api/employee-sync-logs", requireAuth, asyncHandler(async (req, res) => {
+    const { syncConfigId } = req.query;
+    
+    if (!syncConfigId) {
+      return res.status(400).json({ error: "syncConfigId is required" });
+    }
+    
+    const logs = await storage.getEmployeeSyncLogsBySyncConfigId(syncConfigId as string);
+    res.json(logs);
+  }));
+
+  app.get("/api/employee-sync-logs/:id", requireAuth, asyncHandler(async (req, res) => {
+    const log = await storage.getEmployeeSyncLog(req.params.id);
+    if (!log) {
+      return res.status(404).json({ error: "Sync log not found" });
+    }
+    res.json(log);
+  }));
+
+  app.post("/api/employee-sync-logs", requireAuth, asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const validatedData = insertEmployeeSyncLogSchema.parse({ ...req.body, initiatedBy: userId });
+    const log = await storage.createEmployeeSyncLog(validatedData);
+    res.json(log);
+  }));
+
+  app.patch("/api/employee-sync-logs/:id", requireAuth, asyncHandler(async (req, res) => {
+    const log = await storage.updateEmployeeSyncLog(req.params.id, req.body);
+    res.json(log);
   }));
 
   const httpServer = createServer(app);
