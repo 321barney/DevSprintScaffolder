@@ -12,6 +12,11 @@ import JobDetail from "@/pages/JobDetail";
 import PostJob from "@/pages/PostJob";
 import ProviderSignup from "@/pages/ProviderSignup";
 import ProviderDetail from "@/pages/ProviderDetail";
+import ProviderPortfolio from "@/pages/ProviderPortfolio";
+import ServicePackages from "@/pages/ServicePackages";
+import CreateServicePackage from "@/pages/CreateServicePackage";
+import Favorites from "@/pages/Favorites";
+import OrderDashboard from "@/pages/OrderDashboard";
 import Messages from "@/pages/Messages";
 import MeetingsEvents from "@/pages/MeetingsEvents";
 import Bleisure from "@/pages/Bleisure";
@@ -38,6 +43,12 @@ function Router() {
           <Route path="/post-job" component={PostJob} />
           <Route path="/provider/signup" component={ProviderSignup} />
           <Route path="/provider/:id" component={ProviderDetail} />
+          <Route path="/portfolio/:providerId" component={ProviderPortfolio} />
+          <Route path="/service-packages" component={ServicePackages} />
+          <Route path="/service-packages/create" component={CreateServicePackage} />
+          <Route path="/service-packages/:id/edit" component={CreateServicePackage} />
+          <Route path="/favorites" component={Favorites} />
+          <Route path="/orders" component={OrderDashboard} />
           <Route path="/messages/:jobId?" component={Messages} />
           <Route path="/mice" component={MeetingsEvents} />
           <Route path="/bleisure" component={Bleisure} />
