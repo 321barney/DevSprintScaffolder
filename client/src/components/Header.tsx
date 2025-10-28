@@ -7,7 +7,7 @@ import { useLocation } from 'wouter';
 import { useMutation } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Briefcase, LogOut, LogIn, UserPlus, Building2 } from 'lucide-react';
+import { Plus, Briefcase, LogOut, LogIn, UserPlus, Building2, Palmtree, BarChart3, Settings } from 'lucide-react';
 
 export function Header() {
   const { locale, currentUser, setCurrentUser } = useApp();
@@ -67,14 +67,42 @@ export function Header() {
             <Building2 className="w-4 h-4 mr-2" />
             {t('nav.mice')}
           </Button>
+          <Button
+            variant={location.startsWith('/bleisure') ? 'secondary' : 'ghost'}
+            onClick={() => setLocation('/bleisure')}
+            data-testid="nav-bleisure"
+          >
+            <Palmtree className="w-4 h-4 mr-2" />
+            Bleisure
+          </Button>
           {currentUser && (
-            <Button
-              variant={location.startsWith('/jobs') ? 'secondary' : 'ghost'}
-              onClick={() => setLocation('/jobs')}
-              data-testid="nav-jobs"
-            >
-              {t('nav.jobs')}
-            </Button>
+            <>
+              <Button
+                variant={location.startsWith('/jobs') ? 'secondary' : 'ghost'}
+                onClick={() => setLocation('/jobs')}
+                data-testid="nav-jobs"
+              >
+                {t('nav.jobs')}
+              </Button>
+              {currentUser.role === 'admin' && (
+                <Button
+                  variant={location.startsWith('/analytics') ? 'secondary' : 'ghost'}
+                  onClick={() => setLocation('/analytics')}
+                  data-testid="nav-analytics"
+                >
+                  <BarChart3 className="w-4 h-4 mr-2" />
+                  Analytics
+                </Button>
+              )}
+              <Button
+                variant={location.startsWith('/enterprise') ? 'secondary' : 'ghost'}
+                onClick={() => setLocation('/enterprise')}
+                data-testid="nav-enterprise"
+              >
+                <Settings className="w-4 h-4 mr-2" />
+                Enterprise
+              </Button>
+            </>
           )}
         </nav>
 
