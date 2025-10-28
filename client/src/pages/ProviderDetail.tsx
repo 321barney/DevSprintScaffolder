@@ -59,7 +59,7 @@ export default function ProviderDetail() {
             <p className="text-lg text-muted-foreground">{t('provider.not.found')}</p>
             <Button
               className="mt-4"
-              onClick={() => setLocation('/browse')}
+              onClick={() => window.history.back()}
               data-testid="button-back-browse"
             >
               {t('provider.back.browse')}
@@ -90,7 +90,7 @@ export default function ProviderDetail() {
         {/* Back Button */}
         <Button
           variant="ghost"
-          onClick={() => setLocation('/browse')}
+          onClick={() => window.history.back()}
           className="gap-2"
           data-testid="button-back"
         >
