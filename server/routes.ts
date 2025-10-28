@@ -8,7 +8,12 @@ import { providers } from "@shared/schema";
 import { generateDynamicPriceBand, scoreOffer as scoreOfferWithAI } from "./services/ai-pricing";
 import { canProviderSubmitOffer, consumeFreeOffer, incrementPaidOfferCounter, processOfferAcceptance, getOrCreateSubscription } from "./services/commission";
 import { logAudit, AUDIT_ACTIONS } from "./audit";
-import { insertUserSchema, insertProviderSchema, insertJobSchema, insertOfferSchema, insertMessageSchema, insertRatingSchema } from "@shared/schema";
+import { 
+  insertUserSchema, insertProviderSchema, insertJobSchema, insertOfferSchema, 
+  insertMessageSchema, insertRatingSchema, insertVenueSchema, insertVenueRoomSchema,
+  insertRfpSchema, insertQuoteSchema, insertCompanySchema, insertCostCenterSchema,
+  insertTravelerProfileSchema, insertGroupBookingSchema, insertApprovalSchema 
+} from "@shared/schema";
 import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -685,6 +690,414 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } else {
       res.status(400).json({ error: result.error });
     }
+  }));
+
+  // ===== MICE/B2B ROUTES =====
+  
+  // Get all venues (with filters)
+  app.get("/api/venues", asyncHandler(async (req, res) => {
+    const { city, type, verified, invoiceReady } = req.query;
+    
+    const filters: any = {};
+    if (city) filters.city = city as string;
+    if (type) filters.type = type as string;
+    if (verified !== undefined) filters.verified = verified === 'true';
+    if (invoiceReady !== undefined) filters.invoiceReady = invoiceReady === 'true';
+    
+    const venues = await storage.getVenues(filters);
+    res.json(venues);
+  }));
+
+  // Get single venue
+  app.get("/api/venues/:id", asyncHandler(async (req, res) => {
+    const venue = await storage.getVenue(req.params.id);
+    if (!venue) {
+      return res.status(404).json({ error: "Venue not found" });
+    }
+    
+    // Get venue rooms
+    const rooms = await storage.getVenueRoomsByVenueId(venue.id);
+    
+    res.json({ ...venue, rooms });
+  }));
+
+  // Create venue (providers only)
+  app.post("/api/venues", requireAuth, requireRole('provider'), asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const provider = await storage.getProviderByUserId(userId);
+    
+    if (!provider) {
+      return res.status(404).json({ error: "Provider profile not found" });
+    }
+
+    const validatedData = insertVenueSchema.parse({
+      ...req.body,
+      providerId: provider.id,
+    });
+
+    const venue = await storage.createVenue(validatedData);
+    
+    await logAudit({
+      userId,
+      action: 'VENUE_CREATED',
+      resourceType: 'venue',
+      resourceId: venue.id,
+      changes: validatedData,
+      req,
+    });
+
+    res.json(venue);
+  }));
+
+  // Update venue
+  app.patch("/api/venues/:id", requireAuth, requireRole('provider'), asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const provider = await storage.getProviderByUserId(userId);
+    
+    if (!provider) {
+      return res.status(404).json({ error: "Provider profile not found" });
+    }
+
+    const existingVenue = await storage.getVenue(req.params.id);
+    if (!existingVenue) {
+      return res.status(404).json({ error: "Venue not found" });
+    }
+
+    if (existingVenue.providerId !== provider.id) {
+      return res.status(403).json({ error: "Not authorized to update this venue" });
+    }
+
+    const venue = await storage.updateVenue(req.params.id, req.body);
+    
+    await logAudit({
+      userId,
+      action: 'VENUE_UPDATED',
+      resourceType: 'venue',
+      resourceId: req.params.id,
+      changes: req.body,
+      req,
+    });
+
+    res.json(venue);
+  }));
+
+  // Add venue room
+  app.post("/api/venues/:venueId/rooms", requireAuth, requireRole('provider'), asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const provider = await storage.getProviderByUserId(userId);
+    
+    if (!provider) {
+      return res.status(404).json({ error: "Provider profile not found" });
+    }
+
+    const venue = await storage.getVenue(req.params.venueId);
+    if (!venue) {
+      return res.status(404).json({ error: "Venue not found" });
+    }
+
+    if (venue.providerId !== provider.id) {
+      return res.status(403).json({ error: "Not authorized to add rooms to this venue" });
+    }
+
+    const validatedData = insertVenueRoomSchema.parse({
+      ...req.body,
+      venueId: req.params.venueId,
+    });
+
+    const room = await storage.createVenueRoom(validatedData);
+    
+    await logAudit({
+      userId,
+      action: 'VENUE_ROOM_CREATED',
+      resourceType: 'venue_room',
+      resourceId: room.id,
+      changes: validatedData,
+      req,
+    });
+
+    res.json(room);
+  }));
+
+  // Get venue rooms
+  app.get("/api/venues/:venueId/rooms", asyncHandler(async (req, res) => {
+    const rooms = await storage.getVenueRoomsByVenueId(req.params.venueId);
+    res.json(rooms);
+  }));
+
+  // ===== RFP ROUTES =====
+  
+  // Get all open RFPs (for providers)
+  app.get("/api/rfps", asyncHandler(async (req, res) => {
+    const rfps = await storage.getOpenRfps();
+    res.json(rfps);
+  }));
+
+  // Get RFP by ID
+  app.get("/api/rfps/:id", requireAuth, asyncHandler(async (req, res) => {
+    const rfp = await storage.getRfp(req.params.id);
+    if (!rfp) {
+      return res.status(404).json({ error: "RFP not found" });
+    }
+    
+    // Get quotes for this RFP
+    const quotes = await storage.getQuotesByRfpId(rfp.id);
+    
+    res.json({ ...rfp, quotes });
+  }));
+
+  // Create RFP (buyers with company only)
+  app.post("/api/rfps", requireAuth, requireRole('buyer'), asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    
+    const validatedData = insertRfpSchema.parse({
+      ...req.body,
+      createdById: userId,
+    });
+
+    const rfp = await storage.createRfp(validatedData);
+    
+    await logAudit({
+      userId,
+      action: 'RFP_CREATED',
+      resourceType: 'rfp',
+      resourceId: rfp.id,
+      changes: validatedData,
+      req,
+    });
+
+    res.json(rfp);
+  }));
+
+  // Update RFP
+  app.patch("/api/rfps/:id", requireAuth, requireRole('buyer'), asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    
+    const existingRfp = await storage.getRfp(req.params.id);
+    if (!existingRfp) {
+      return res.status(404).json({ error: "RFP not found" });
+    }
+
+    if (existingRfp.createdById !== userId) {
+      return res.status(403).json({ error: "Not authorized to update this RFP" });
+    }
+
+    const rfp = await storage.updateRfp(req.params.id, req.body);
+    
+    await logAudit({
+      userId,
+      action: 'RFP_UPDATED',
+      resourceType: 'rfp',
+      resourceId: req.params.id,
+      changes: req.body,
+      req,
+    });
+
+    res.json(rfp);
+  }));
+
+  // Get quotes for RFP
+  app.get("/api/rfps/:id/quotes", requireAuth, asyncHandler(async (req, res) => {
+    const quotes = await storage.getQuotesByRfpId(req.params.id);
+    res.json(quotes);
+  }));
+
+  // Submit quote for RFP (providers only)
+  app.post("/api/rfps/:id/quotes", requireAuth, requireRole('provider'), asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const provider = await storage.getProviderByUserId(userId);
+    
+    if (!provider) {
+      return res.status(404).json({ error: "Provider profile not found" });
+    }
+
+    const validatedData = insertQuoteSchema.parse({
+      ...req.body,
+      rfpId: req.params.id,
+      providerId: provider.id,
+    });
+
+    const quote = await storage.createQuote(validatedData);
+    
+    await logAudit({
+      userId,
+      action: 'QUOTE_SUBMITTED',
+      resourceType: 'quote',
+      resourceId: quote.id,
+      changes: validatedData,
+      req,
+    });
+
+    res.json(quote);
+  }));
+
+  // ===== COMPANY & CORPORATE ROUTES =====
+  
+  // Create company
+  app.post("/api/companies", requireAuth, requireRole('buyer'), asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    
+    const validatedData = insertCompanySchema.parse({
+      ...req.body,
+      primaryContactId: userId,
+    });
+
+    const company = await storage.createCompany(validatedData);
+    
+    await logAudit({
+      userId,
+      action: 'COMPANY_CREATED',
+      resourceType: 'company',
+      resourceId: company.id,
+      changes: validatedData,
+      req,
+    });
+
+    res.json(company);
+  }));
+
+  // Get company
+  app.get("/api/companies/:id", requireAuth, asyncHandler(async (req, res) => {
+    const company = await storage.getCompany(req.params.id);
+    if (!company) {
+      return res.status(404).json({ error: "Company not found" });
+    }
+    res.json(company);
+  }));
+
+  // Get cost centers for company
+  app.get("/api/companies/:id/cost-centers", requireAuth, asyncHandler(async (req, res) => {
+    const costCenters = await storage.getCostCentersByCompanyId(req.params.id);
+    res.json(costCenters);
+  }));
+
+  // Create cost center
+  app.post("/api/cost-centers", requireAuth, requireRole('buyer'), asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    
+    const validatedData = insertCostCenterSchema.parse(req.body);
+    const costCenter = await storage.createCostCenter(validatedData);
+    
+    await logAudit({
+      userId,
+      action: 'COST_CENTER_CREATED',
+      resourceType: 'cost_center',
+      resourceId: costCenter.id,
+      changes: validatedData,
+      req,
+    });
+
+    res.json(costCenter);
+  }));
+
+  // Get traveler profiles for company
+  app.get("/api/companies/:id/travelers", requireAuth, asyncHandler(async (req, res) => {
+    const travelers = await storage.getTravelerProfilesByCompanyId(req.params.id);
+    res.json(travelers);
+  }));
+
+  // Create traveler profile
+  app.post("/api/traveler-profiles", requireAuth, requireRole('buyer'), asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    
+    const validatedData = insertTravelerProfileSchema.parse({
+      ...req.body,
+      userId,
+    });
+
+    const profile = await storage.createTravelerProfile(validatedData);
+    
+    await logAudit({
+      userId,
+      action: 'TRAVELER_PROFILE_CREATED',
+      resourceType: 'traveler_profile',
+      resourceId: profile.id,
+      changes: validatedData,
+      req,
+    });
+
+    res.json(profile);
+  }));
+
+  // Get approvals for user
+  app.get("/api/approvals/pending", requireAuth, asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const approvals = await storage.getPendingApprovals(userId);
+    res.json(approvals);
+  }));
+
+  // Create approval
+  app.post("/api/approvals", requireAuth, asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    
+    const validatedData = insertApprovalSchema.parse({
+      ...req.body,
+      requestedById: userId,
+    });
+
+    const approval = await storage.createApproval(validatedData);
+    
+    await logAudit({
+      userId,
+      action: 'APPROVAL_REQUESTED',
+      resourceType: 'approval',
+      resourceId: approval.id,
+      changes: validatedData,
+      req,
+    });
+
+    res.json(approval);
+  }));
+
+  // Update approval status
+  app.patch("/api/approvals/:id", requireAuth, asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    
+    const existingApproval = await storage.getApproval(req.params.id);
+    if (!existingApproval) {
+      return res.status(404).json({ error: "Approval not found" });
+    }
+
+    if (existingApproval.approverId !== userId) {
+      return res.status(403).json({ error: "Not authorized to approve this request" });
+    }
+
+    const approval = await storage.updateApproval(req.params.id, req.body);
+    
+    await logAudit({
+      userId,
+      action: 'APPROVAL_UPDATED',
+      resourceType: 'approval',
+      resourceId: req.params.id,
+      changes: req.body,
+      req,
+    });
+
+    res.json(approval);
+  }));
+
+  // Get group bookings for company
+  app.get("/api/companies/:id/bookings", requireAuth, asyncHandler(async (req, res) => {
+    const bookings = await storage.getGroupBookingsByCompanyId(req.params.id);
+    res.json(bookings);
+  }));
+
+  // Create group booking
+  app.post("/api/group-bookings", requireAuth, requireRole('buyer'), asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    
+    const validatedData = insertGroupBookingSchema.parse(req.body);
+    const booking = await storage.createGroupBooking(validatedData);
+    
+    await logAudit({
+      userId,
+      action: 'GROUP_BOOKING_CREATED',
+      resourceType: 'group_booking',
+      resourceId: booking.id,
+      changes: validatedData,
+      req,
+    });
+
+    res.json(booking);
   }));
 
   const httpServer = createServer(app);
