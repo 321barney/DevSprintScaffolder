@@ -643,3 +643,423 @@ export type InsertTrip = z.infer<typeof insertTripSchema>;
 
 export type TripTrack = typeof tripTracks.$inferSelect;
 export type InsertTripTrack = z.infer<typeof insertTripTrackSchema>;
+
+// ========================================
+// PHASE 3: MICE & B2B Features
+// ========================================
+
+// Companies - Corporate accounts
+export const companies = pgTable("companies", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  legalName: text("legal_name"),
+  taxId: text("tax_id"),
+  industry: text("industry"),
+  employeeCount: integer("employee_count"),
+  billingAddress: jsonb("billing_address"),
+  primaryContactId: uuid("primary_contact_id").references(() => users.id),
+  paymentTerms: text("payment_terms").default("net-30").$type<"net-15" | "net-30" | "net-60" | "prepaid">(),
+  creditLimit: integer("credit_limit"),
+  status: text("status").default("active").notNull().$type<"active" | "suspended" | "closed">(),
+  ssoProvider: text("sso_provider").$type<"google" | "microsoft" | "none">(),
+  ssoConfig: jsonb("sso_config"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const companiesRelations = relations(companies, ({ one, many }) => ({
+  primaryContact: one(users, {
+    fields: [companies.primaryContactId],
+    references: [users.id],
+  }),
+  costCenters: many(costCenters),
+  travelerProfiles: many(travelerProfiles),
+  rfps: many(rfps),
+}));
+
+// Cost Centers - Budget tracking for corporate spending
+export const costCenters = pgTable("cost_centers", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").references(() => companies.id).notNull(),
+  code: text("code").notNull(),
+  name: text("name").notNull(),
+  budgetMad: integer("budget_mad"),
+  spentMad: integer("spent_mad").default(0).notNull(),
+  managerId: uuid("manager_id").references(() => users.id),
+  status: text("status").default("active").notNull().$type<"active" | "inactive">(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const costCentersRelations = relations(costCenters, ({ one }) => ({
+  company: one(companies, {
+    fields: [costCenters.companyId],
+    references: [companies.id],
+  }),
+  manager: one(users, {
+    fields: [costCenters.managerId],
+    references: [users.id],
+  }),
+}));
+
+// Traveler Profiles - Corporate traveler information
+export const travelerProfiles = pgTable("traveler_profiles", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").references(() => companies.id).notNull(),
+  userId: uuid("user_id").references(() => users.id).notNull(),
+  employeeId: text("employee_id"),
+  department: text("department"),
+  costCenterId: uuid("cost_center_id").references(() => costCenters.id),
+  preferences: jsonb("preferences"), // dietary, room type, accessibility
+  emergencyContact: jsonb("emergency_contact"),
+  passportNumber: text("passport_number"),
+  passportExpiry: timestamp("passport_expiry"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const travelerProfilesRelations = relations(travelerProfiles, ({ one }) => ({
+  company: one(companies, {
+    fields: [travelerProfiles.companyId],
+    references: [companies.id],
+  }),
+  user: one(users, {
+    fields: [travelerProfiles.userId],
+    references: [users.id],
+  }),
+  costCenter: one(costCenters, {
+    fields: [travelerProfiles.costCenterId],
+    references: [costCenters.id],
+  }),
+}));
+
+// Venues - Convention-ready inventory
+export const venues = pgTable("venues", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  providerId: uuid("provider_id").references(() => providers.id).notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  type: text("type").notNull().$type<"hotel" | "convention_center" | "coworking" | "event_space" | "other">(),
+  city: text("city").notNull(),
+  address: text("address"),
+  latitude: decimal("latitude", { precision: 10, scale: 7 }),
+  longitude: decimal("longitude", { precision: 10, scale: 7 }),
+  totalCapacity: integer("total_capacity"),
+  photoUrls: text("photo_urls").array().default([]),
+  floorPlanUrl: text("floor_plan_url"),
+  amenities: jsonb("amenities"), // WiFi, AV, catering, parking, accessibility
+  pricing: jsonb("pricing"), // day rates, half-day, hourly
+  verified: boolean("verified").default(false).notNull(),
+  invoiceReady: boolean("invoice_ready").default(false).notNull(),
+  slaResponseHours: integer("sla_response_hours").default(24),
+  cancellationPolicy: text("cancellation_policy"),
+  status: text("status").default("active").notNull().$type<"active" | "inactive" | "pending">(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const venuesRelations = relations(venues, ({ one, many }) => ({
+  provider: one(providers, {
+    fields: [venues.providerId],
+    references: [providers.id],
+  }),
+  rooms: many(venueRooms),
+}));
+
+// Venue Rooms - Meeting rooms with detailed specs
+export const venueRooms = pgTable("venue_rooms", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  venueId: uuid("venue_id").references(() => venues.id).notNull(),
+  name: text("name").notNull(),
+  capacity: integer("capacity").notNull(),
+  layout: text("layout").array().default([]), // theater, classroom, u-shape, boardroom, banquet, cocktail
+  squareMeters: decimal("square_meters", { precision: 8, scale: 2 }),
+  features: jsonb("features"), // projector, screen, whiteboard, video conferencing, sound system
+  catering: boolean("catering").default(false),
+  breakoutRooms: integer("breakout_rooms").default(0),
+  naturalLight: boolean("natural_light").default(false),
+  accessibility: boolean("accessibility").default(false),
+  photoUrls: text("photo_urls").array().default([]),
+  pricePerDayMad: integer("price_per_day_mad"),
+  pricePerHalfDayMad: integer("price_per_half_day_mad"),
+  status: text("status").default("available").notNull().$type<"available" | "unavailable">(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const venueRoomsRelations = relations(venueRooms, ({ one }) => ({
+  venue: one(venues, {
+    fields: [venueRooms.venueId],
+    references: [venues.id],
+  }),
+}));
+
+// RFPs - Request for Proposals
+export const rfps = pgTable("rfps", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").references(() => companies.id).notNull(),
+  createdById: uuid("created_by_id").references(() => users.id).notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  eventType: text("event_type").notNull().$type<"conference" | "meeting" | "training" | "exhibition" | "gala" | "other">(),
+  city: text("city").notNull(),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date").notNull(),
+  attendeeCount: integer("attendee_count").notNull(),
+  requirements: jsonb("requirements"), // venue, rooms, catering, AV, transport
+  budgetMad: integer("budget_mad"),
+  costCenterId: uuid("cost_center_id").references(() => costCenters.id),
+  slaHours: integer("sla_hours").default(24).notNull(),
+  status: text("status").default("draft").notNull().$type<"draft" | "published" | "closed" | "awarded" | "cancelled">(),
+  awardedQuoteId: uuid("awarded_quote_id"),
+  publishedAt: timestamp("published_at"),
+  closesAt: timestamp("closes_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const rfpsRelations = relations(rfps, ({ one, many }) => ({
+  company: one(companies, {
+    fields: [rfps.companyId],
+    references: [companies.id],
+  }),
+  createdBy: one(users, {
+    fields: [rfps.createdById],
+    references: [users.id],
+  }),
+  costCenter: one(costCenters, {
+    fields: [rfps.costCenterId],
+    references: [costCenters.id],
+  }),
+  quotes: many(quotes),
+}));
+
+// Quotes - Supplier quotes for RFPs
+export const quotes = pgTable("quotes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  rfpId: uuid("rfp_id").references(() => rfps.id).notNull(),
+  providerId: uuid("provider_id").references(() => providers.id).notNull(),
+  venueId: uuid("venue_id").references(() => venues.id),
+  totalPriceMad: integer("total_price_mad").notNull(),
+  breakdown: jsonb("breakdown").notNull(), // venue, catering, AV, transport itemized
+  notes: text("notes"),
+  validUntil: timestamp("valid_until").notNull(),
+  responseTimeSla: boolean("response_time_sla").default(false),
+  status: text("status").default("pending").notNull().$type<"pending" | "accepted" | "declined" | "expired">(),
+  submittedAt: timestamp("submitted_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const quotesRelations = relations(quotes, ({ one }) => ({
+  rfp: one(rfps, {
+    fields: [quotes.rfpId],
+    references: [rfps.id],
+  }),
+  provider: one(providers, {
+    fields: [quotes.providerId],
+    references: [providers.id],
+  }),
+  venue: one(venues, {
+    fields: [quotes.venueId],
+    references: [venues.id],
+  }),
+}));
+
+// Group Bookings - Room blocks for events
+export const groupBookings = pgTable("group_bookings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  rfpId: uuid("rfp_id").references(() => rfps.id),
+  quoteId: uuid("quote_id").references(() => quotes.id),
+  companyId: uuid("company_id").references(() => companies.id).notNull(),
+  venueId: uuid("venue_id").references(() => venues.id).notNull(),
+  eventName: text("event_name").notNull(),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date").notNull(),
+  roomsBlocked: integer("rooms_blocked").notNull(),
+  roomsBooked: integer("rooms_booked").default(0).notNull(),
+  roomingList: jsonb("rooming_list"), // [{name, email, room, dates}]
+  depositSchedule: jsonb("deposit_schedule"), // [{amount, dueDate, status}]
+  totalPriceMad: integer("total_price_mad").notNull(),
+  paidMad: integer("paid_mad").default(0).notNull(),
+  poNumber: text("po_number"),
+  costCenterId: uuid("cost_center_id").references(() => costCenters.id),
+  status: text("status").default("pending").notNull().$type<"pending" | "confirmed" | "in_progress" | "completed" | "cancelled">(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const groupBookingsRelations = relations(groupBookings, ({ one }) => ({
+  rfp: one(rfps, {
+    fields: [groupBookings.rfpId],
+    references: [rfps.id],
+  }),
+  quote: one(quotes, {
+    fields: [groupBookings.quoteId],
+    references: [quotes.id],
+  }),
+  company: one(companies, {
+    fields: [groupBookings.companyId],
+    references: [companies.id],
+  }),
+  venue: one(venues, {
+    fields: [groupBookings.venueId],
+    references: [venues.id],
+  }),
+  costCenter: one(costCenters, {
+    fields: [groupBookings.costCenterId],
+    references: [costCenters.id],
+  }),
+}));
+
+// Approvals - Approval workflow for corporate bookings
+export const approvals = pgTable("approvals", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").references(() => companies.id).notNull(),
+  resourceType: text("resource_type").notNull().$type<"rfp" | "group_booking" | "expense">(),
+  resourceId: text("resource_id").notNull(),
+  requestedById: uuid("requested_by_id").references(() => users.id).notNull(),
+  approverId: uuid("approver_id").references(() => users.id).notNull(),
+  amountMad: integer("amount_mad"),
+  status: text("status").default("pending").notNull().$type<"pending" | "approved" | "rejected">(),
+  notes: text("notes"),
+  approvedAt: timestamp("approved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const approvalsRelations = relations(approvals, ({ one }) => ({
+  company: one(companies, {
+    fields: [approvals.companyId],
+    references: [companies.id],
+  }),
+  requestedBy: one(users, {
+    fields: [approvals.requestedById],
+    references: [users.id],
+    relationName: "requester",
+  }),
+  approver: one(users, {
+    fields: [approvals.approverId],
+    references: [users.id],
+    relationName: "approver",
+  }),
+}));
+
+// Phase 3 Insert Schemas
+export const insertCompanySchema = createInsertSchema(companies, {
+  paymentTerms: z.enum(["net-15", "net-30", "net-60", "prepaid"]).optional(),
+  ssoProvider: z.enum(["google", "microsoft", "none"]).optional(),
+  billingAddress: z.record(z.any()).optional(),
+  ssoConfig: z.record(z.any()).optional(),
+}).omit({ 
+  id: true, 
+  createdAt: true,
+  updatedAt: true,
+  status: true,
+});
+
+export const insertCostCenterSchema = createInsertSchema(costCenters).omit({ 
+  id: true, 
+  createdAt: true,
+  status: true,
+  spentMad: true,
+});
+
+export const insertTravelerProfileSchema = createInsertSchema(travelerProfiles, {
+  preferences: z.record(z.any()).optional(),
+  emergencyContact: z.record(z.any()).optional(),
+}).omit({ 
+  id: true, 
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertVenueSchema = createInsertSchema(venues, {
+  type: z.enum(["hotel", "convention_center", "coworking", "event_space", "other"]),
+  photoUrls: z.array(z.string().url()).optional(),
+  amenities: z.record(z.any()).optional(),
+  pricing: z.record(z.any()).optional(),
+}).omit({ 
+  id: true, 
+  createdAt: true,
+  updatedAt: true,
+  status: true,
+  verified: true,
+});
+
+export const insertVenueRoomSchema = createInsertSchema(venueRooms, {
+  layout: z.array(z.string()).optional(),
+  features: z.record(z.any()).optional(),
+  photoUrls: z.array(z.string().url()).optional(),
+}).omit({ 
+  id: true, 
+  createdAt: true,
+  status: true,
+});
+
+export const insertRfpSchema = createInsertSchema(rfps, {
+  eventType: z.enum(["conference", "meeting", "training", "exhibition", "gala", "other"]),
+  requirements: z.record(z.any()).optional(),
+}).omit({ 
+  id: true, 
+  createdAt: true,
+  updatedAt: true,
+  status: true,
+  publishedAt: true,
+  awardedQuoteId: true,
+});
+
+export const insertQuoteSchema = createInsertSchema(quotes, {
+  breakdown: z.record(z.any()),
+}).omit({ 
+  id: true, 
+  createdAt: true,
+  status: true,
+  submittedAt: true,
+  responseTimeSla: true,
+});
+
+export const insertGroupBookingSchema = createInsertSchema(groupBookings, {
+  roomingList: z.array(z.record(z.any())).optional(),
+  depositSchedule: z.array(z.record(z.any())).optional(),
+}).omit({ 
+  id: true, 
+  createdAt: true,
+  updatedAt: true,
+  status: true,
+  roomsBooked: true,
+  paidMad: true,
+});
+
+export const insertApprovalSchema = createInsertSchema(approvals, {
+  resourceType: z.enum(["rfp", "group_booking", "expense"]),
+}).omit({ 
+  id: true, 
+  createdAt: true,
+  status: true,
+  approvedAt: true,
+});
+
+// Phase 3 Select Types
+export type Company = typeof companies.$inferSelect;
+export type InsertCompany = z.infer<typeof insertCompanySchema>;
+
+export type CostCenter = typeof costCenters.$inferSelect;
+export type InsertCostCenter = z.infer<typeof insertCostCenterSchema>;
+
+export type TravelerProfile = typeof travelerProfiles.$inferSelect;
+export type InsertTravelerProfile = z.infer<typeof insertTravelerProfileSchema>;
+
+export type Venue = typeof venues.$inferSelect;
+export type InsertVenue = z.infer<typeof insertVenueSchema>;
+
+export type VenueRoom = typeof venueRooms.$inferSelect;
+export type InsertVenueRoom = z.infer<typeof insertVenueRoomSchema>;
+
+export type Rfp = typeof rfps.$inferSelect;
+export type InsertRfp = z.infer<typeof insertRfpSchema>;
+
+export type Quote = typeof quotes.$inferSelect;
+export type InsertQuote = z.infer<typeof insertQuoteSchema>;
+
+export type GroupBooking = typeof groupBookings.$inferSelect;
+export type InsertGroupBooking = z.infer<typeof insertGroupBookingSchema>;
+
+export type Approval = typeof approvals.$inferSelect;
+export type InsertApproval = z.infer<typeof insertApprovalSchema>;
