@@ -9,6 +9,7 @@ import {
   qualityAudits, postEventNps, famTrips, famTripRegistrations,
   bleisurePackages, coworkingSpaces, bleisureBookings, savingsAttributions, cohortAnalyses,
   hrisSyncConfigs, ssoConnections, employeeSyncLogs,
+  servicePackages, favorites, packageOrders,
   type User, type InsertUser,
   type Provider, type InsertProvider,
   type Job, type InsertJob,
@@ -58,9 +59,12 @@ import {
   type HrisSyncConfig, type InsertHrisSyncConfig,
   type SsoConnection, type InsertSsoConnection,
   type EmployeeSyncLog, type InsertEmployeeSyncLog,
+  type ServicePackage, type InsertServicePackage,
+  type Favorite, type InsertFavorite,
+  type PackageOrder, type InsertPackageOrder,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, gte, lte } from "drizzle-orm";
+import { eq, and, desc, gte, lte, like, or, sql } from "drizzle-orm";
 
 // Storage interface for all CRUD operations
 export interface IStorage {
@@ -305,6 +309,28 @@ export interface IStorage {
   getFamTripRegistrationsByUserId(userId: string): Promise<FamTripRegistration[]>;
   createFamTripRegistration(registration: InsertFamTripRegistration): Promise<FamTripRegistration>;
   updateFamTripRegistration(id: string, data: Partial<FamTripRegistration>): Promise<FamTripRegistration | undefined>;
+
+  // Phase 1 Marketplace: Service Packages
+  createServicePackage(data: InsertServicePackage): Promise<ServicePackage>;
+  getServicePackage(id: string): Promise<ServicePackage | undefined>;
+  getServicePackagesByProvider(providerId: string): Promise<ServicePackage[]>;
+  getServicePackages(filters?: { category?: string; active?: boolean; search?: string }): Promise<ServicePackage[]>;
+  updateServicePackage(id: string, data: Partial<InsertServicePackage>): Promise<ServicePackage | undefined>;
+  deleteServicePackage(id: string): Promise<void>;
+  incrementPackageViews(id: string): Promise<void>;
+
+  // Phase 1 Marketplace: Favorites
+  createFavorite(data: InsertFavorite): Promise<Favorite>;
+  deleteFavorite(id: string): Promise<void>;
+  getFavoritesByUser(userId: string, itemType?: string): Promise<Favorite[]>;
+  checkFavorite(userId: string, itemType: string, itemId: string): Promise<Favorite | undefined>;
+
+  // Phase 1 Marketplace: Package Orders
+  createPackageOrder(data: InsertPackageOrder): Promise<PackageOrder>;
+  getPackageOrder(id: string): Promise<PackageOrder | undefined>;
+  getPackageOrdersByBuyer(buyerId: string): Promise<PackageOrder[]>;
+  getPackageOrdersByProvider(providerId: string): Promise<PackageOrder[]>;
+  updatePackageOrder(id: string, data: Partial<InsertPackageOrder>): Promise<PackageOrder | undefined>;
 }
 
 // Database storage implementation
@@ -1515,6 +1541,152 @@ export class DatabaseStorage implements IStorage {
   async updateEmployeeSyncLog(id: string, data: Partial<EmployeeSyncLog>): Promise<EmployeeSyncLog | undefined> {
     const [log] = await db.update(employeeSyncLogs).set(data as any).where(eq(employeeSyncLogs.id, id)).returning();
     return log || undefined;
+  }
+
+  // Phase 1 Marketplace: Service Packages
+  async createServicePackage(data: InsertServicePackage): Promise<ServicePackage> {
+    const [pkg] = await db.insert(servicePackages).values(data as any).returning();
+    return pkg;
+  }
+
+  async getServicePackage(id: string): Promise<ServicePackage | undefined> {
+    const [pkg] = await db.select().from(servicePackages).where(eq(servicePackages.id, id));
+    return pkg || undefined;
+  }
+
+  async getServicePackagesByProvider(providerId: string): Promise<ServicePackage[]> {
+    return await db
+      .select()
+      .from(servicePackages)
+      .where(eq(servicePackages.providerId, providerId))
+      .orderBy(desc(servicePackages.createdAt));
+  }
+
+  async getServicePackages(filters?: { category?: string; active?: boolean; search?: string }): Promise<ServicePackage[]> {
+    let query = db.select().from(servicePackages);
+    
+    const conditions = [];
+    
+    if (filters?.category) {
+      conditions.push(eq(servicePackages.category, filters.category as any));
+    }
+    
+    if (filters?.active !== undefined) {
+      conditions.push(eq(servicePackages.active, filters.active));
+    }
+    
+    if (filters?.search) {
+      conditions.push(
+        or(
+          like(servicePackages.name, `%${filters.search}%`),
+          like(servicePackages.description, `%${filters.search}%`)
+        )
+      );
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    return await query.orderBy(desc(servicePackages.createdAt));
+  }
+
+  async updateServicePackage(id: string, data: Partial<InsertServicePackage>): Promise<ServicePackage | undefined> {
+    const [pkg] = await db
+      .update(servicePackages)
+      .set(data as any)
+      .where(eq(servicePackages.id, id))
+      .returning();
+    return pkg || undefined;
+  }
+
+  async deleteServicePackage(id: string): Promise<void> {
+    await db.delete(servicePackages).where(eq(servicePackages.id, id));
+  }
+
+  async incrementPackageViews(id: string): Promise<void> {
+    await db
+      .update(servicePackages)
+      .set({ views: sql`${servicePackages.views} + 1` })
+      .where(eq(servicePackages.id, id));
+  }
+
+  // Phase 1 Marketplace: Favorites
+  async createFavorite(data: InsertFavorite): Promise<Favorite> {
+    const [favorite] = await db.insert(favorites).values(data as any).returning();
+    return favorite;
+  }
+
+  async deleteFavorite(id: string): Promise<void> {
+    await db.delete(favorites).where(eq(favorites.id, id));
+  }
+
+  async getFavoritesByUser(userId: string, itemType?: string): Promise<Favorite[]> {
+    const conditions = [eq(favorites.userId, userId)];
+    
+    if (itemType) {
+      conditions.push(eq(favorites.itemType, itemType as any));
+    }
+    
+    return await db
+      .select()
+      .from(favorites)
+      .where(and(...conditions))
+      .orderBy(desc(favorites.createdAt));
+  }
+
+  async checkFavorite(userId: string, itemType: string, itemId: string): Promise<Favorite | undefined> {
+    const [favorite] = await db
+      .select()
+      .from(favorites)
+      .where(
+        and(
+          eq(favorites.userId, userId),
+          eq(favorites.itemType, itemType as any),
+          eq(favorites.itemId, itemId)
+        )
+      );
+    return favorite || undefined;
+  }
+
+  // Phase 1 Marketplace: Package Orders
+  async createPackageOrder(data: InsertPackageOrder): Promise<PackageOrder> {
+    const [order] = await db.insert(packageOrders).values(data as any).returning();
+    return order;
+  }
+
+  async getPackageOrder(id: string): Promise<PackageOrder | undefined> {
+    const [order] = await db.select().from(packageOrders).where(eq(packageOrders.id, id));
+    return order || undefined;
+  }
+
+  async getPackageOrdersByBuyer(buyerId: string): Promise<PackageOrder[]> {
+    return await db
+      .select()
+      .from(packageOrders)
+      .innerJoin(jobs, eq(packageOrders.jobId, jobs.id))
+      .where(eq(jobs.buyerId, buyerId))
+      .orderBy(desc(packageOrders.createdAt))
+      .then(rows => rows.map(row => row.package_orders));
+  }
+
+  async getPackageOrdersByProvider(providerId: string): Promise<PackageOrder[]> {
+    return await db
+      .select()
+      .from(packageOrders)
+      .innerJoin(servicePackages, eq(packageOrders.packageId, servicePackages.id))
+      .where(eq(servicePackages.providerId, providerId))
+      .orderBy(desc(packageOrders.createdAt))
+      .then(rows => rows.map(row => row.package_orders));
+  }
+
+  async updatePackageOrder(id: string, data: Partial<InsertPackageOrder>): Promise<PackageOrder | undefined> {
+    const [order] = await db
+      .update(packageOrders)
+      .set(data as any)
+      .where(eq(packageOrders.id, id))
+      .returning();
+    return order || undefined;
   }
 }
 

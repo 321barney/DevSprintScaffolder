@@ -51,6 +51,15 @@ export const AUDIT_ACTIONS = {
   PROVIDER_VERIFY: 'provider.verify',
   PROVIDER_UPDATE_KYC: 'provider.update_kyc',
   
+  // Service Packages (Marketplace)
+  PACKAGE_CREATE: 'package.create',
+  PACKAGE_UPDATE: 'package.update',
+  PACKAGE_DELETE: 'package.delete',
+  
+  // Package Orders (Marketplace)
+  ORDER_CREATE: 'order.create',
+  ORDER_UPDATE: 'order.update',
+  
   // Admin
   ROLE_CHANGE: 'user.role_change',
   ADMIN_ACTION: 'admin.action',

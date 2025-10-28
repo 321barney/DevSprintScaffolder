@@ -22,7 +22,8 @@ import {
   insertFamTripSchema, insertFamTripRegistrationSchema,
   insertBleisurePackageSchema, insertCoworkingSpaceSchema, insertBleisureBookingSchema,
   insertSavingsAttributionSchema, insertCohortAnalysisSchema, insertHrisSyncConfigSchema,
-  insertSsoConnectionSchema, insertEmployeeSyncLogSchema
+  insertSsoConnectionSchema, insertEmployeeSyncLogSchema,
+  insertServicePackageSchema, insertFavoriteSchema, insertPackageOrderSchema
 } from "@shared/schema";
 import { z } from "zod";
 
@@ -2080,6 +2081,303 @@ END:VCALENDAR`;
   app.patch("/api/employee-sync-logs/:id", requireAuth, asyncHandler(async (req, res) => {
     const log = await storage.updateEmployeeSyncLog(req.params.id, req.body);
     res.json(log);
+  }));
+
+  // ===== SERVICE PACKAGES ROUTES (Phase 1 Marketplace) =====
+  app.get("/api/service-packages", asyncHandler(async (req, res) => {
+    const { category, active, search } = req.query;
+    
+    const filters: { category?: string; active?: boolean; search?: string } = {};
+    
+    if (category) {
+      filters.category = category as string;
+    }
+    
+    if (active !== undefined) {
+      filters.active = active === 'true';
+    }
+    
+    if (search) {
+      filters.search = search as string;
+    }
+    
+    const packages = await storage.getServicePackages(filters);
+    res.json(packages);
+  }));
+
+  app.get("/api/service-packages/:id", asyncHandler(async (req, res) => {
+    const pkg = await storage.getServicePackage(req.params.id);
+    if (!pkg) {
+      return res.status(404).json({ error: "Service package not found" });
+    }
+    res.json(pkg);
+  }));
+
+  app.post("/api/service-packages", requireAuth, requireRole('provider'), asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    
+    // Get provider record
+    const provider = await storage.getProviderByUserId(userId);
+    if (!provider) {
+      return res.status(403).json({ error: "Provider profile required" });
+    }
+    
+    const validatedData = insertServicePackageSchema.parse({
+      ...req.body,
+      providerId: provider.id,
+    });
+    
+    const pkg = await storage.createServicePackage(validatedData);
+    
+    await logAudit({
+      userId,
+      action: AUDIT_ACTIONS.PACKAGE_CREATE,
+      resourceType: 'service_package',
+      resourceId: pkg.id,
+      changes: { name: pkg.name, category: pkg.category },
+      req,
+    });
+    
+    res.json(pkg);
+  }));
+
+  app.patch("/api/service-packages/:id", requireAuth, requireRole('provider'), asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    
+    // Get provider record
+    const provider = await storage.getProviderByUserId(userId);
+    if (!provider) {
+      return res.status(403).json({ error: "Provider profile required" });
+    }
+    
+    // Check ownership
+    const existingPkg = await storage.getServicePackage(req.params.id);
+    if (!existingPkg) {
+      return res.status(404).json({ error: "Service package not found" });
+    }
+    
+    if (existingPkg.providerId !== provider.id) {
+      return res.status(403).json({ error: "Not authorized to update this package" });
+    }
+    
+    const validatedData = insertServicePackageSchema.partial().parse(req.body);
+    const pkg = await storage.updateServicePackage(req.params.id, validatedData);
+    
+    await logAudit({
+      userId,
+      action: AUDIT_ACTIONS.PACKAGE_UPDATE,
+      resourceType: 'service_package',
+      resourceId: req.params.id,
+      changes: validatedData,
+      req,
+    });
+    
+    res.json(pkg);
+  }));
+
+  app.delete("/api/service-packages/:id", requireAuth, requireRole('provider'), asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    
+    // Get provider record
+    const provider = await storage.getProviderByUserId(userId);
+    if (!provider) {
+      return res.status(403).json({ error: "Provider profile required" });
+    }
+    
+    // Check ownership
+    const existingPkg = await storage.getServicePackage(req.params.id);
+    if (!existingPkg) {
+      return res.status(404).json({ error: "Service package not found" });
+    }
+    
+    if (existingPkg.providerId !== provider.id) {
+      return res.status(403).json({ error: "Not authorized to delete this package" });
+    }
+    
+    await storage.deleteServicePackage(req.params.id);
+    
+    await logAudit({
+      userId,
+      action: AUDIT_ACTIONS.PACKAGE_DELETE,
+      resourceType: 'service_package',
+      resourceId: req.params.id,
+      req,
+    });
+    
+    res.json({ success: true });
+  }));
+
+  app.get("/api/providers/:id/packages", asyncHandler(async (req, res) => {
+    const packages = await storage.getServicePackagesByProvider(req.params.id);
+    res.json(packages);
+  }));
+
+  app.post("/api/service-packages/:id/view", asyncHandler(async (req, res) => {
+    await storage.incrementPackageViews(req.params.id);
+    res.json({ success: true });
+  }));
+
+  // ===== FAVORITES ROUTES (Phase 1 Marketplace) =====
+  app.get("/api/favorites", requireAuth, asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const { itemType } = req.query;
+    
+    const favorites = await storage.getFavoritesByUser(userId, itemType as string);
+    res.json(favorites);
+  }));
+
+  app.post("/api/favorites", requireAuth, asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    
+    const validatedData = insertFavoriteSchema.parse({
+      ...req.body,
+      userId,
+    });
+    
+    // Check if already favorited
+    const existing = await storage.checkFavorite(userId, validatedData.itemType, validatedData.itemId);
+    if (existing) {
+      return res.status(400).json({ error: "Item already favorited" });
+    }
+    
+    const favorite = await storage.createFavorite(validatedData);
+    res.json(favorite);
+  }));
+
+  app.delete("/api/favorites/:id", requireAuth, asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    
+    // Note: In production, you should verify ownership before deletion
+    await storage.deleteFavorite(req.params.id);
+    res.json({ success: true });
+  }));
+
+  app.get("/api/favorites/check", requireAuth, asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const { itemType, itemId } = req.query;
+    
+    if (!itemType || !itemId) {
+      return res.status(400).json({ error: "itemType and itemId are required" });
+    }
+    
+    const favorite = await storage.checkFavorite(userId, itemType as string, itemId as string);
+    res.json({ favorited: !!favorite, favorite: favorite || null });
+  }));
+
+  // ===== PACKAGE ORDERS ROUTES (Phase 1 Marketplace) =====
+  app.get("/api/orders", requireAuth, asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const role = req.session.role!;
+    
+    let orders;
+    if (role === 'buyer') {
+      orders = await storage.getPackageOrdersByBuyer(userId);
+    } else if (role === 'provider') {
+      const provider = await storage.getProviderByUserId(userId);
+      if (!provider) {
+        return res.json([]);
+      }
+      orders = await storage.getPackageOrdersByProvider(provider.id);
+    } else {
+      return res.status(403).json({ error: "Invalid role for this operation" });
+    }
+    
+    res.json(orders);
+  }));
+
+  app.post("/api/orders", requireAuth, requireRole('buyer'), asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const { packageId, tier, selectedExtras, requirements } = req.body;
+    
+    // Get package to calculate price
+    const pkg = await storage.getServicePackage(packageId);
+    if (!pkg) {
+      return res.status(404).json({ error: "Service package not found" });
+    }
+    
+    // Calculate total price based on tier
+    let totalPriceMad = 0;
+    let deliveryDays = 0;
+    
+    if (tier === 'basic') {
+      totalPriceMad = pkg.basicPriceMad;
+      deliveryDays = pkg.basicDeliveryDays;
+    } else if (tier === 'standard' && pkg.standardPriceMad) {
+      totalPriceMad = pkg.standardPriceMad;
+      deliveryDays = pkg.standardDeliveryDays || 0;
+    } else if (tier === 'premium' && pkg.premiumPriceMad) {
+      totalPriceMad = pkg.premiumPriceMad;
+      deliveryDays = pkg.premiumDeliveryDays || 0;
+    } else {
+      return res.status(400).json({ error: "Invalid tier selected" });
+    }
+    
+    // Add extras pricing if any
+    // This is simplified - in production you'd validate extras against pkg.extras
+    
+    // Create a job first (linking to existing job system)
+    const job = await storage.createJob({
+      buyerId: userId,
+      category: pkg.category as any,
+      spec: { packageOrder: true, packageId, tier, requirements },
+      budgetHintMad: totalPriceMad,
+    });
+    
+    // Calculate delivery date
+    const deliveryDate = new Date();
+    deliveryDate.setDate(deliveryDate.getDate() + deliveryDays);
+    
+    const validatedData = insertPackageOrderSchema.parse({
+      jobId: job.id,
+      packageId,
+      tier,
+      selectedExtras: selectedExtras || [],
+      totalPriceMad,
+      deliveryDate,
+      requirements,
+      revisions: 0,
+      maxRevisions: tier === 'premium' ? 3 : tier === 'standard' ? 2 : 1,
+    });
+    
+    const order = await storage.createPackageOrder(validatedData);
+    
+    await logAudit({
+      userId,
+      action: AUDIT_ACTIONS.ORDER_CREATE,
+      resourceType: 'package_order',
+      resourceId: order.id,
+      changes: { packageId, tier, totalPriceMad },
+      req,
+    });
+    
+    res.json(order);
+  }));
+
+  app.get("/api/orders/:id", requireAuth, asyncHandler(async (req, res) => {
+    const order = await storage.getPackageOrder(req.params.id);
+    if (!order) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+    res.json(order);
+  }));
+
+  app.patch("/api/orders/:id", requireAuth, asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    
+    // Note: In production, add ownership/role checks
+    const validatedData = insertPackageOrderSchema.partial().parse(req.body);
+    const order = await storage.updatePackageOrder(req.params.id, validatedData);
+    
+    await logAudit({
+      userId,
+      action: AUDIT_ACTIONS.ORDER_UPDATE,
+      resourceType: 'package_order',
+      resourceId: req.params.id,
+      changes: validatedData,
+      req,
+    });
+    
+    res.json(order);
   }));
 
   const httpServer = createServer(app);

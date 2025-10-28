@@ -29,6 +29,13 @@ No specific user preferences were provided in the original document.
 - **Provider Profiles**: Public profiles with photos, portfolios, and verified credentials.
 - **Subscription Tiers**: Starter, Professional, Fleet with varying offer limits and commission rates.
 - **Private Messaging**: Accessible via job details only.
+- **Phase 1: Marketplace Features** (TripAdvisor + Fiverr):
+  - **Service Packages**: Fiverr-style 3-tier offerings (Basic/Standard/Premium) with custom pricing, delivery times, and features per tier
+  - **Package Extras**: Add-ons that buyers can select for additional cost
+  - **Favorites/Wishlists**: Users can save providers, packages, venues, and other items with optional notes
+  - **Portfolio Showcase**: Display provider portfolios with photo galleries
+  - **Order Dashboard**: Track package orders with status (pending/in-progress/delivered/revision/completed/cancelled)
+  - **Order Management**: Revision tracking, delivery deadlines, requirements, and deliverables
 - **Bleisure & Coworking** (Phase 6):
   - **Bleisure Packages**: Combined business and leisure travel packages with coworking space integration
   - **Coworking Spaces**: Verified workspace listings with hourly/daily/monthly rates, meeting rooms, prayer rooms, high-speed internet
@@ -68,6 +75,7 @@ No specific user preferences were provided in the original document.
     - **Advanced MICE Tables**: `partner_tiers`, `corporate_rates`, `milestone_payments`, `event_reports`, `itineraries`, `disruption_alerts`, `dmc_partners`.
     - **Phase 5 Enhancement Tables**: `notification_preferences`, `notification_history`, `virtual_cards`, `expense_entries`, `sustainability_metrics`, `quality_audits`, `post_event_nps`, `fam_trips`, `fam_trip_registrations`.
     - **Phase 6 Tables**: `bleisure_packages`, `coworking_spaces`, `bleisure_bookings`, `savings_attributions`, `cohort_analyses`, `hris_sync_configs`, `sso_connections`, `employee_sync_logs`.
+    - **Phase 1 Marketplace Tables**: `service_packages`, `favorites`, `package_orders`.
 - **API Endpoints**:
     - **Authentication**: `POST /api/auth/signup`, `POST /api/auth/login`.
     - **Jobs**: `POST /api/jobs`, `GET /api/jobs`, `GET /api/jobs/:id`, `POST /api/jobs/:id/cancel`.
@@ -93,6 +101,9 @@ No specific user preferences were provided in the original document.
     - **Phase 6 - Bleisure**: `GET /api/bleisure-packages`, `POST /api/bleisure-packages`, `GET /api/bleisure-packages/:id`, `PATCH /api/bleisure-packages/:id`, `GET /api/coworking-spaces`, `POST /api/coworking-spaces`, `GET /api/coworking-spaces/:id`, `PATCH /api/coworking-spaces/:id`, `GET /api/bleisure-bookings`, `POST /api/bleisure-bookings`, `GET /api/bleisure-bookings/:id`, `PATCH /api/bleisure-bookings/:id`.
     - **Phase 6 - Analytics**: `GET /api/savings-attributions`, `POST /api/savings-attributions`, `GET /api/savings-attributions/:id`, `GET /api/cohort-analyses`, `POST /api/cohort-analyses`, `GET /api/cohort-analyses/:id`.
     - **Phase 6 - HRIS/SSO**: `GET /api/hris-sync-configs`, `POST /api/hris-sync-configs`, `GET /api/hris-sync-configs/:id`, `PATCH /api/hris-sync-configs/:id`, `GET /api/sso-connections`, `POST /api/sso-connections`, `GET /api/sso-connections/:id`, `PATCH /api/sso-connections/:id`, `GET /api/employee-sync-logs`, `POST /api/employee-sync-logs`, `GET /api/employee-sync-logs/:id`, `PATCH /api/employee-sync-logs/:id`.
+    - **Phase 1 - Service Packages**: `GET /api/service-packages`, `POST /api/service-packages`, `GET /api/service-packages/:id`, `PATCH /api/service-packages/:id`, `DELETE /api/service-packages/:id`, `GET /api/providers/:id/packages`, `POST /api/service-packages/:id/view`.
+    - **Phase 1 - Favorites**: `GET /api/favorites`, `POST /api/favorites`, `DELETE /api/favorites/:id`, `GET /api/favorites/check`.
+    - **Phase 1 - Orders**: `GET /api/orders`, `POST /api/orders`, `GET /api/orders/:id`, `PATCH /api/orders/:id`.
 - **AI Modules**:
     - **Pricing Band**: `server/ai/pricing.ts` calculates price ranges based on city, category, distance, passengers, and time.
     - **Offer Scoring**: `server/ai/scoring.ts` scores offers based on provider rating, price fairness, ETA, compliance, and job fit.
