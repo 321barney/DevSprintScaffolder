@@ -1657,3 +1657,286 @@ export type InsertFamTrip = z.infer<typeof insertFamTripSchema>;
 
 export type FamTripRegistration = typeof famTripRegistrations.$inferSelect;
 export type InsertFamTripRegistration = z.infer<typeof insertFamTripRegistrationSchema>;
+
+// === PHASE 6: Bleisure, Advanced Analytics, HRIS/SSO ===
+
+// Bleisure Packages - Business + leisure combined packages
+export const bleisurePackages = pgTable("bleisure_packages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  providerId: uuid("provider_id").references(() => providers.id).notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  city: text("city").notNull(),
+  businessDays: integer("business_days").notNull(),
+  leisureDays: integer("leisure_days").notNull(),
+  businessInclusions: jsonb("business_inclusions").default([]).notNull(),
+  leisureInclusions: jsonb("leisure_inclusions").default([]).notNull(),
+  pricePerPersonMad: integer("price_per_person_mad").notNull(),
+  minParticipants: integer("min_participants").default(1).notNull(),
+  maxParticipants: integer("max_participants").notNull(),
+  availableFrom: timestamp("available_from").notNull(),
+  availableTo: timestamp("available_to").notNull(),
+  coworkingIncluded: boolean("coworking_included").default(false).notNull(),
+  coworkingSpaceId: uuid("coworking_space_id").references((): any => coworkingSpaces.id),
+  photos: jsonb("photos").default([]).notNull(),
+  status: text("status").default("active").notNull().$type<"active" | "inactive" | "soldout">(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const bleisurePackagesRelations = relations(bleisurePackages, ({ one }) => ({
+  provider: one(providers, {
+    fields: [bleisurePackages.providerId],
+    references: [providers.id],
+  }),
+  coworkingSpace: one(coworkingSpaces, {
+    fields: [bleisurePackages.coworkingSpaceId],
+    references: [coworkingSpaces.id],
+  }),
+}));
+
+export const insertBleisurePackageSchema = createInsertSchema(bleisurePackages).omit({ id: true, createdAt: true, updatedAt: true });
+
+// Coworking Spaces - Available coworking/workspace options
+export const coworkingSpaces = pgTable("coworking_spaces", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  providerId: uuid("provider_id").references(() => providers.id).notNull(),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  city: text("city").notNull(),
+  address: text("address").notNull(),
+  latitude: decimal("latitude", { precision: 10, scale: 7 }),
+  longitude: decimal("longitude", { precision: 10, scale: 7 }),
+  capacity: integer("capacity").notNull(),
+  amenities: jsonb("amenities").default([]).notNull(),
+  hourlyRateMad: integer("hourly_rate_mad"),
+  dailyRateMad: integer("daily_rate_mad"),
+  monthlyRateMad: integer("monthly_rate_mad"),
+  meetingRoomsAvailable: integer("meeting_rooms_available").default(0).notNull(),
+  highSpeedInternet: boolean("high_speed_internet").default(true).notNull(),
+  prayerRoom: boolean("prayer_room").default(false).notNull(),
+  photos: jsonb("photos").default([]).notNull(),
+  verified: boolean("verified").default(false).notNull(),
+  rating: decimal("rating", { precision: 3, scale: 2 }).default("0").notNull(),
+  openingHours: jsonb("opening_hours").default({}).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const coworkingSpacesRelations = relations(coworkingSpaces, ({ one }) => ({
+  provider: one(providers, {
+    fields: [coworkingSpaces.providerId],
+    references: [providers.id],
+  }),
+}));
+
+export const insertCoworkingSpaceSchema = createInsertSchema(coworkingSpaces).omit({ id: true, createdAt: true });
+
+// Bleisure Bookings - Track bleisure package bookings
+export const bleisureBookings = pgTable("bleisure_bookings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  packageId: uuid("package_id").references(() => bleisurePackages.id).notNull(),
+  companyId: uuid("company_id").references(() => companies.id),
+  userId: uuid("user_id").references(() => users.id).notNull(),
+  participants: integer("participants").notNull(),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date").notNull(),
+  totalCostMad: integer("total_cost_mad").notNull(),
+  specialRequests: text("special_requests"),
+  coworkingDaysBooked: integer("coworking_days_booked").default(0).notNull(),
+  status: text("status").default("pending").notNull().$type<"pending" | "confirmed" | "cancelled" | "completed">(),
+  paymentStatus: text("payment_status").default("pending").notNull().$type<"pending" | "partial" | "paid" | "refunded">(),
+  metadata: jsonb("metadata").default({}).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const bleisureBookingsRelations = relations(bleisureBookings, ({ one }) => ({
+  package: one(bleisurePackages, {
+    fields: [bleisureBookings.packageId],
+    references: [bleisurePackages.id],
+  }),
+  company: one(companies, {
+    fields: [bleisureBookings.companyId],
+    references: [companies.id],
+  }),
+  user: one(users, {
+    fields: [bleisureBookings.userId],
+    references: [users.id],
+  }),
+}));
+
+export const insertBleisureBookingSchema = createInsertSchema(bleisureBookings).omit({ id: true, createdAt: true });
+
+// Savings Attributions - Track cost savings for companies
+export const savingsAttributions = pgTable("savings_attributions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").references(() => companies.id).notNull(),
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  category: text("category").notNull().$type<"negotiated_rates" | "early_booking" | "volume_discount" | "bleisure" | "consolidation" | "other">(),
+  baselineCostMad: integer("baseline_cost_mad").notNull(),
+  actualCostMad: integer("actual_cost_mad").notNull(),
+  savingsMad: integer("savings_mad").notNull(),
+  savingsPercentage: decimal("savings_percentage", { precision: 5, scale: 2 }).notNull(),
+  bookingCount: integer("booking_count").default(0).notNull(),
+  description: text("description").notNull(),
+  relatedBookingIds: jsonb("related_booking_ids").default([]).notNull(),
+  calculationMethod: text("calculation_method").notNull(),
+  verifiedBy: uuid("verified_by").references(() => users.id),
+  metadata: jsonb("metadata").default({}).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const savingsAttributionsRelations = relations(savingsAttributions, ({ one }) => ({
+  company: one(companies, {
+    fields: [savingsAttributions.companyId],
+    references: [companies.id],
+  }),
+  verifier: one(users, {
+    fields: [savingsAttributions.verifiedBy],
+    references: [users.id],
+  }),
+}));
+
+export const insertSavingsAttributionSchema = createInsertSchema(savingsAttributions).omit({ id: true, createdAt: true });
+
+// Cohort Analyses - Customer lifetime value by cohort
+export const cohortAnalyses = pgTable("cohort_analyses", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  cohortMonth: text("cohort_month").notNull(),
+  cohortType: text("cohort_type").notNull().$type<"company_size" | "industry" | "geography" | "acquisition_channel">(),
+  cohortSegment: text("cohort_segment").notNull(),
+  companyCount: integer("company_count").notNull(),
+  monthsActive: integer("months_active").notNull(),
+  totalBookings: integer("total_bookings").notNull(),
+  totalRevenueMad: integer("total_revenue_mad").notNull(),
+  avgBookingValueMad: integer("avg_booking_value_mad").notNull(),
+  avgLifetimeValueMad: integer("avg_lifetime_value_mad").notNull(),
+  churnRate: decimal("churn_rate", { precision: 5, scale: 2 }).default("0").notNull(),
+  retentionRate: decimal("retention_rate", { precision: 5, scale: 2 }).default("100").notNull(),
+  monthlyData: jsonb("monthly_data").default([]).notNull(),
+  calculatedAt: timestamp("calculated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertCohortAnalysisSchema = createInsertSchema(cohortAnalyses).omit({ id: true, calculatedAt: true, createdAt: true });
+
+// HRIS Sync Configs - HR system integration configurations
+export const hrisSyncConfigs = pgTable("hris_sync_configs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").references(() => companies.id).notNull(),
+  provider: text("provider").notNull().$type<"workday" | "bamboohr" | "adp" | "gusto" | "rippling" | "personio" | "other">(),
+  apiKey: text("api_key").notNull(),
+  apiEndpoint: text("api_endpoint"),
+  syncFrequency: text("sync_frequency").default("daily").notNull().$type<"hourly" | "daily" | "weekly" | "manual">(),
+  fieldMappings: jsonb("field_mappings").default({}).notNull(),
+  syncEmployees: boolean("sync_employees").default(true).notNull(),
+  syncDepartments: boolean("sync_departments").default(true).notNull(),
+  syncCostCenters: boolean("sync_cost_centers").default(true).notNull(),
+  autoCreateTravelerProfiles: boolean("auto_create_traveler_profiles").default(true).notNull(),
+  lastSyncAt: timestamp("last_sync_at"),
+  lastSyncStatus: text("last_sync_status").$type<"success" | "failed" | "partial">(),
+  lastSyncErrors: jsonb("last_sync_errors").default([]).notNull(),
+  status: text("status").default("active").notNull().$type<"active" | "paused" | "error">(),
+  metadata: jsonb("metadata").default({}).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const hrisSyncConfigsRelations = relations(hrisSyncConfigs, ({ one }) => ({
+  company: one(companies, {
+    fields: [hrisSyncConfigs.companyId],
+    references: [companies.id],
+  }),
+}));
+
+export const insertHrisSyncConfigSchema = createInsertSchema(hrisSyncConfigs).omit({ id: true, createdAt: true, updatedAt: true });
+
+// SSO Connections - Single Sign-On configurations
+export const ssoConnections = pgTable("sso_connections", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").references(() => companies.id).notNull(),
+  protocol: text("protocol").notNull().$type<"saml" | "oauth2" | "oidc">(),
+  provider: text("provider").notNull().$type<"okta" | "azure_ad" | "google_workspace" | "onelogin" | "auth0" | "other">(),
+  entityId: text("entity_id"),
+  ssoUrl: text("sso_url").notNull(),
+  certificate: text("certificate"),
+  clientId: text("client_id"),
+  clientSecret: text("client_secret"),
+  issuer: text("issuer"),
+  allowedDomains: jsonb("allowed_domains").default([]).notNull(),
+  autoProvision: boolean("auto_provision").default(true).notNull(),
+  defaultRole: text("default_role").default("buyer").notNull().$type<"buyer" | "provider" | "admin">(),
+  attributeMappings: jsonb("attribute_mappings").default({}).notNull(),
+  status: text("status").default("active").notNull().$type<"active" | "inactive" | "testing">(),
+  metadata: jsonb("metadata").default({}).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const ssoConnectionsRelations = relations(ssoConnections, ({ one }) => ({
+  company: one(companies, {
+    fields: [ssoConnections.companyId],
+    references: [companies.id],
+  }),
+}));
+
+export const insertSsoConnectionSchema = createInsertSchema(ssoConnections).omit({ id: true, createdAt: true, updatedAt: true });
+
+// Employee Sync Logs - Track HRIS sync operations
+export const employeeSyncLogs = pgTable("employee_sync_logs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  syncConfigId: uuid("sync_config_id").references(() => hrisSyncConfigs.id).notNull(),
+  syncStartedAt: timestamp("sync_started_at").defaultNow().notNull(),
+  syncCompletedAt: timestamp("sync_completed_at"),
+  totalRecords: integer("total_records").default(0).notNull(),
+  successfulRecords: integer("successful_records").default(0).notNull(),
+  failedRecords: integer("failed_records").default(0).notNull(),
+  skippedRecords: integer("skipped_records").default(0).notNull(),
+  newProfiles: integer("new_profiles").default(0).notNull(),
+  updatedProfiles: integer("updated_profiles").default(0).notNull(),
+  deactivatedProfiles: integer("deactivated_profiles").default(0).notNull(),
+  errors: jsonb("errors").default([]).notNull(),
+  warnings: jsonb("warnings").default([]).notNull(),
+  status: text("status").default("in_progress").notNull().$type<"in_progress" | "completed" | "failed" | "cancelled">(),
+  triggerType: text("trigger_type").notNull().$type<"scheduled" | "manual" | "webhook">(),
+  initiatedBy: uuid("initiated_by").references(() => users.id),
+  metadata: jsonb("metadata").default({}).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const employeeSyncLogsRelations = relations(employeeSyncLogs, ({ one }) => ({
+  syncConfig: one(hrisSyncConfigs, {
+    fields: [employeeSyncLogs.syncConfigId],
+    references: [hrisSyncConfigs.id],
+  }),
+  initiator: one(users, {
+    fields: [employeeSyncLogs.initiatedBy],
+    references: [users.id],
+  }),
+}));
+
+export const insertEmployeeSyncLogSchema = createInsertSchema(employeeSyncLogs).omit({ id: true, createdAt: true });
+
+export type BleisurePackage = typeof bleisurePackages.$inferSelect;
+export type InsertBleisurePackage = z.infer<typeof insertBleisurePackageSchema>;
+
+export type CoworkingSpace = typeof coworkingSpaces.$inferSelect;
+export type InsertCoworkingSpace = z.infer<typeof insertCoworkingSpaceSchema>;
+
+export type BleisureBooking = typeof bleisureBookings.$inferSelect;
+export type InsertBleisureBooking = z.infer<typeof insertBleisureBookingSchema>;
+
+export type SavingsAttribution = typeof savingsAttributions.$inferSelect;
+export type InsertSavingsAttribution = z.infer<typeof insertSavingsAttributionSchema>;
+
+export type CohortAnalysis = typeof cohortAnalyses.$inferSelect;
+export type InsertCohortAnalysis = z.infer<typeof insertCohortAnalysisSchema>;
+
+export type HrisSyncConfig = typeof hrisSyncConfigs.$inferSelect;
+export type InsertHrisSyncConfig = z.infer<typeof insertHrisSyncConfigSchema>;
+
+export type SsoConnection = typeof ssoConnections.$inferSelect;
+export type InsertSsoConnection = z.infer<typeof insertSsoConnectionSchema>;
+
+export type EmployeeSyncLog = typeof employeeSyncLogs.$inferSelect;
+export type InsertEmployeeSyncLog = z.infer<typeof insertEmployeeSyncLogSchema>;

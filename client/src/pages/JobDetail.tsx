@@ -59,10 +59,10 @@ export default function JobDetail() {
       queryClient.invalidateQueries({ queryKey: ['/api/jobs', id] });
       queryClient.invalidateQueries({ queryKey: ['/api/jobs', id, 'offers'] });
       toast({
-        title: 'Offre acceptée',
-        description: 'Le prestataire a été notifié',
+        title: 'Offer Accepted',
+        description: 'The provider has been notified. You can now message them.',
       });
-      setLocation(`/jobs/${id}/messages`);
+      setLocation(`/messages/${id}`);
     },
   });
 
