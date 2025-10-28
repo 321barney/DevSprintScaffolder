@@ -1,0 +1,91 @@
+Product & UX
+
+Corporate workspaces: company accounts, SSO (Google/Microsoft), cost centers, traveler profiles, approval workflows, travel policies, negotiated rates.
+
+MICE search: a dedicated “Meetings & Events” tab with venue filters (capacity, room layout, AV, Wi-Fi speed, breakout rooms, catering, parking, accessibility).
+
+RFP manager: create/send/track venue & DMC requests; compare quotes side-by-side; set response SLAs; one-click award.
+
+Group booking flow: room blocks, deposit schedules, manifests/rooming lists, name changes, split payments.
+
+Bleisure bundles: auto-suggest weekend add-ons and coworking passes near hotels/venues.
+
+Trust signals: verified suppliers, insurance badge, SLA response times, cancellation tiers, “invoice-ready” filter.
+
+Supply & Partnerships
+
+Convention-ready inventory: onboard hotels with conference space, convention centers, coworking chains, AV vendors, translators, executive transport.
+
+Corporate partnerships: chambers of commerce, local convention bureaus, top employers, airlines/rail for corporate fares; form “Preferred Partner” tiers with perks.
+
+DMC network: vetted Destination Management Companies to assemble turnkey programs (venue + AV + transfers + gala dinner).
+
+Payments, Invoicing & Compliance
+
+B2B payments: company invoicing with Net-15/30 terms, PO numbers, cost-center routing, partial/deposit payments, escrow milestone releases.
+
+Virtual cards & multi-payer: traveler pays extras while HQ settles core invoice.
+
+Tax-compliant docs: VAT-compliant pro forma & final invoices, downloadable statements by cost center and project.
+
+Data, Duty of Care & Integrations
+
+Reporting suite: spend by BU/cost center, savings vs. public rate, RFP win rate, on-time confirmations, traveler satisfaction.
+
+Sustainability: CO₂ estimates per trip and per event with reduction tips; exportable for ESG reporting.
+
+Duty of care: traveler itineraries, emergency contacts, disruption alerts, supplier compliance checks.
+
+Integrations (phased): calendar invites (.ics), Slack/Teams notifications, expense tools (e.g., Concur), HRIS sync for traveler profiles.
+
+Marketing & Sales Motions
+
+Account-based marketing: target top 200 employers (Casablanca/Rabat/Marrakech), industry pages (Tech, Pharma, Finance).
+
+Lead magnets: “Morocco MICE Guide,” venue capacity map, seasonal pricing benchmarks.
+
+SEO: landing pages for “meeting rooms in {city},” “conference venues {city},” long-tail filters (U-shape layout, 200 pax).
+
+Events: host quarterly buyer–supplier showcases; run FAM trips with DMCs.
+
+Ops Playbooks
+
+Venue onboarding kit: data template (capacities, floorplans, AV lists, day-delegate rates), SLA commitment, sample contracts.
+
+RFP turnaround SLAs: e.g., 24h first quote, 72h final; auto-reassign if late.
+
+Quality bar: secret shopper checks, post-event NPS, remediation credits.
+
+Engineering Backlog (minimal schema to enable this)
+
+Entities: Company, CostCenter, Policy, Approver, TravelerProfile, CorporateRate, Venue, VenueRoom, RFP, Quote, Block, Deposit, Invoice, SLA.
+
+Flows: approval API, RFP lifecycle, group block management, invoice generator, SLA tracker.
+
+UI: Corporate Workspace, RFP board (Kanban), Group Block editor, Venue comparison.
+
+KPIs to watch
+
+RFP→Booking rate, time-to-first-quote, share of bookings with rooms + venue + transport (bundle rate), avg group size, on-time confirmation %, corporate LTV, NPS.
+
+90-Day rollout (practical)
+
+Weeks 1–3 (Quick wins)
+
+Launch “Meetings & Events” tab + venue filters, corporate sign-up page, invoice-ready flag.
+
+Onboard 30 priority venues with full specs & floorplans.
+
+Weeks 4–6 (Core flows)
+
+Ship RFP MVP + quote comparison; add deposit schedules and Net-30 invoicing.
+
+Pilot with 3–5 companies; enforce response SLAs with suppliers.
+
+Weeks 7–12 (Scale & trust)
+
+Group blocks & rooming lists; analytics dashboard v1; Slack/Teams notifications.
+
+Publish MICE guide + targeted SEO pages; run first buyer–supplier showcase.
+
+If you want, I can turn this into a short backlog with user stories and acceptance criteria tailored to your current codebase.
