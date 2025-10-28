@@ -3,13 +3,18 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useTranslation } from "@/lib/i18n";
 import { useApp } from "@/contexts/AppContext";
 import { useLocation } from "wouter";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { insertVenueSchema } from "@shared/schema";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -18,6 +23,15 @@ import {
   Building2, CheckCircle2, FileText, Users, Wifi, 
   Coffee, Car, Tv, MapPin, Star, Palmtree, ArrowRight, Plus 
 } from "lucide-react";
+
+const venueFormSchema = insertVenueSchema.omit({ id: true, providerId: true, createdAt: true, updatedAt: true, verified: true }).extend({
+  amenities: z.object({
+    wifi: z.boolean().default(false),
+    catering: z.boolean().default(false),
+    parking: z.boolean().default(false),
+    av: z.boolean().default(false),
+  }).optional().default({ wifi: false, catering: false, parking: false, av: false }),
+});
 
 type Venue = {
   id: string;
@@ -76,17 +90,38 @@ export default function MeetingsEvents() {
   });
 
   const cities = ['Casablanca', 'Marrakech', 'Rabat', 'Fez', 'Tangier', 'Agadir'];
-  const venueTypes = ['hotel', 'conference_center', 'restaurant', 'villa'];
+  const venueTypes = ['hotel', 'conference_center', 'coworking', 'event_space', 'other'];
+
+  const venueForm = useForm<z.infer<typeof venueFormSchema>>({
+    resolver: zodResolver(venueFormSchema),
+    defaultValues: {
+      name: '',
+      description: '',
+      type: 'hotel',
+      city: '',
+      address: '',
+      totalCapacity: 1,
+      slaResponseHours: 24,
+      amenities: {
+        wifi: false,
+        catering: false,
+        parking: false,
+        av: false,
+      },
+      invoiceReady: false,
+    },
+  });
 
   const createVenueMutation = useMutation({
-    mutationFn: async (data: any) => {
-      return apiRequest('POST', '/api/venues', data);
+    mutationFn: async (data: z.infer<typeof venueFormSchema>) => {
+      return apiRequest('POST', '/api/venues', { ...data, status: 'active' });
     },
     onSuccess: () => {
       toast({
         title: "Venue created",
         description: "Your venue has been added successfully.",
       });
+      venueForm.reset();
       setCreateVenueOpen(false);
       queryClient.invalidateQueries({ queryKey: ['/api/venues'] });
     },
@@ -136,152 +171,256 @@ export default function MeetingsEvents() {
                     Add your meeting space, conference center, or event venue
                   </DialogDescription>
                 </DialogHeader>
-                <form onSubmit={(e) => {
-                  e.preventDefault();
-                  const formData = new FormData(e.currentTarget);
-                  createVenueMutation.mutate({
-                    name: formData.get('name'),
-                    description: formData.get('description'),
-                    type: formData.get('type'),
-                    city: formData.get('city'),
-                    address: formData.get('address'),
-                    totalCapacity: parseInt(formData.get('totalCapacity') as string),
-                    slaResponseHours: parseInt(formData.get('slaResponseHours') as string) || 24,
-                    amenities: {
-                      wifi: formData.get('wifi') === 'on',
-                      catering: formData.get('catering') === 'on',
-                      parking: formData.get('parking') === 'on',
-                      av: formData.get('av') === 'on',
-                    },
-                    invoiceReady: formData.get('invoiceReady') === 'on',
-                    status: 'active',
-                  });
-                }}>
-                  <div className="space-y-4 py-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="name">Venue Name *</Label>
-                        <Input
-                          id="name"
+                <Form {...venueForm}>
+                  <form onSubmit={venueForm.handleSubmit((data) => createVenueMutation.mutate(data))}>
+                    <div className="space-y-4 py-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                          control={venueForm.control}
                           name="name"
-                          placeholder="Royal Palace Hotel"
-                          required
-                          data-testid="input-venue-name"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Venue Name *</FormLabel>
+                              <FormControl>
+                                <Input
+                                  placeholder="Royal Palace Hotel"
+                                  data-testid="input-venue-name"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={venueForm.control}
+                          name="type"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Venue Type *</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl>
+                                  <SelectTrigger data-testid="select-venue-type">
+                                    <SelectValue placeholder="Select type" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {venueTypes.map(type => (
+                                    <SelectItem key={type} value={type}>
+                                      {t(`venue.type.${type}` as any)}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
                         />
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="type">Venue Type *</Label>
-                        <Select name="type" required>
-                          <SelectTrigger data-testid="select-venue-type">
-                            <SelectValue placeholder="Select type" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {venueTypes.map(type => (
-                              <SelectItem key={type} value={type}>
-                                {t(`venue.type.${type}` as any)}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="description">Description *</Label>
-                      <Textarea
-                        id="description"
+                      <FormField
+                        control={venueForm.control}
                         name="description"
-                        placeholder="Describe your venue, facilities, and unique features..."
-                        rows={3}
-                        required
-                        data-testid="input-venue-description"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Description *</FormLabel>
+                            <FormControl>
+                              <Textarea
+                                placeholder="Describe your venue, facilities, and unique features..."
+                                rows={3}
+                                data-testid="input-venue-description"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
                       />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="city">City *</Label>
-                        <Select name="city" required>
-                          <SelectTrigger data-testid="select-venue-city">
-                            <SelectValue placeholder="Select city" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {cities.map(city => (
-                              <SelectItem key={city} value={city}>{city}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="totalCapacity">Total Capacity *</Label>
-                        <Input
-                          id="totalCapacity"
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                          control={venueForm.control}
+                          name="city"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>City *</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl>
+                                  <SelectTrigger data-testid="select-venue-city">
+                                    <SelectValue placeholder="Select city" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {cities.map(city => (
+                                    <SelectItem key={city} value={city}>{city}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={venueForm.control}
                           name="totalCapacity"
-                          type="number"
-                          placeholder="500"
-                          min="1"
-                          required
-                          data-testid="input-venue-capacity"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Total Capacity *</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  placeholder="500"
+                                  min="1"
+                                  data-testid="input-venue-capacity"
+                                  {...field}
+                                  onChange={(e) => field.onChange(parseInt(e.target.value))}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
                         />
                       </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="address">Address *</Label>
-                      <Input
-                        id="address"
+                      <FormField
+                        control={venueForm.control}
                         name="address"
-                        placeholder="123 Avenue Hassan II"
-                        required
-                        data-testid="input-venue-address"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Address</FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="123 Avenue Hassan II"
+                                data-testid="input-venue-address"
+                                {...field}
+                                value={field.value || ''}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
                       />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="slaResponseHours">SLA Response Time (hours)</Label>
-                      <Input
-                        id="slaResponseHours"
+                      <FormField
+                        control={venueForm.control}
                         name="slaResponseHours"
-                        type="number"
-                        placeholder="24"
-                        min="1"
-                        defaultValue="24"
-                        data-testid="input-venue-sla"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>SLA Response Time (hours)</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                placeholder="24"
+                                min="1"
+                                data-testid="input-venue-sla"
+                                {...field}
+                                value={field.value || 24}
+                                onChange={(e) => field.onChange(parseInt(e.target.value) || 24)}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
                       />
-                    </div>
-                    <div className="space-y-3">
-                      <Label>Amenities</Label>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="flex items-center gap-2">
-                          <Switch name="wifi" id="wifi" data-testid="switch-wifi" />
-                          <Label htmlFor="wifi" className="cursor-pointer">WiFi</Label>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Switch name="catering" id="catering" data-testid="switch-catering" />
-                          <Label htmlFor="catering" className="cursor-pointer">Catering</Label>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Switch name="parking" id="parking" data-testid="switch-parking" />
-                          <Label htmlFor="parking" className="cursor-pointer">Parking</Label>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Switch name="av" id="av" data-testid="switch-av" />
-                          <Label htmlFor="av" className="cursor-pointer">AV Equipment</Label>
+                      <div className="space-y-3">
+                        <Label>Amenities</Label>
+                        <div className="grid grid-cols-2 gap-3">
+                          <FormField
+                            control={venueForm.control}
+                            name="amenities.wifi"
+                            render={({ field }) => (
+                              <FormItem className="flex items-center gap-2">
+                                <FormControl>
+                                  <Switch
+                                    id="wifi"
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                    data-testid="switch-wifi"
+                                  />
+                                </FormControl>
+                                <Label htmlFor="wifi" className="cursor-pointer">WiFi</Label>
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={venueForm.control}
+                            name="amenities.catering"
+                            render={({ field }) => (
+                              <FormItem className="flex items-center gap-2">
+                                <FormControl>
+                                  <Switch
+                                    id="catering"
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                    data-testid="switch-catering"
+                                  />
+                                </FormControl>
+                                <Label htmlFor="catering" className="cursor-pointer">Catering</Label>
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={venueForm.control}
+                            name="amenities.parking"
+                            render={({ field }) => (
+                              <FormItem className="flex items-center gap-2">
+                                <FormControl>
+                                  <Switch
+                                    id="parking"
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                    data-testid="switch-parking"
+                                  />
+                                </FormControl>
+                                <Label htmlFor="parking" className="cursor-pointer">Parking</Label>
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={venueForm.control}
+                            name="amenities.av"
+                            render={({ field }) => (
+                              <FormItem className="flex items-center gap-2">
+                                <FormControl>
+                                  <Switch
+                                    id="av"
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                    data-testid="switch-av"
+                                  />
+                                </FormControl>
+                                <Label htmlFor="av" className="cursor-pointer">AV Equipment</Label>
+                              </FormItem>
+                            )}
+                          />
                         </div>
                       </div>
+                      <FormField
+                        control={venueForm.control}
+                        name="invoiceReady"
+                        render={({ field }) => (
+                          <FormItem className="flex items-center gap-2 pt-2">
+                            <FormControl>
+                              <Switch
+                                id="invoiceReady"
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                                data-testid="switch-invoice-ready"
+                              />
+                            </FormControl>
+                            <Label htmlFor="invoiceReady" className="cursor-pointer">
+                              Invoice Ready (VAT-compliant invoicing available)
+                            </Label>
+                          </FormItem>
+                        )}
+                      />
                     </div>
-                    <div className="flex items-center gap-2 pt-2">
-                      <Switch name="invoiceReady" id="invoiceReady" data-testid="switch-invoice-ready" />
-                      <Label htmlFor="invoiceReady" className="cursor-pointer">
-                        Invoice Ready (VAT-compliant invoicing available)
-                      </Label>
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button type="button" variant="outline" onClick={() => setCreateVenueOpen(false)}>
-                      Cancel
-                    </Button>
-                    <Button type="submit" disabled={createVenueMutation.isPending} data-testid="button-submit-venue">
-                      {createVenueMutation.isPending ? "Creating..." : "Create Venue"}
-                    </Button>
-                  </DialogFooter>
-                </form>
+                    <DialogFooter>
+                      <Button type="button" variant="outline" onClick={() => setCreateVenueOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button type="submit" disabled={createVenueMutation.isPending} data-testid="button-submit-venue">
+                        {createVenueMutation.isPending ? "Creating..." : "Create Venue"}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </Form>
               </DialogContent>
             </Dialog>
           )}

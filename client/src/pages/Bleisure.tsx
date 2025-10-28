@@ -1,12 +1,17 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useApp } from "@/contexts/AppContext";
+import { insertBleisurePackageSchema, insertCoworkingSpaceSchema } from "@shared/schema";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -16,6 +21,30 @@ import { Switch } from "@/components/ui/switch";
 import { Briefcase, Coffee, MapPin, Users, Wifi, Calendar, DollarSign, Plus } from "lucide-react";
 
 const MOROCCO_CITIES = ["Casablanca", "Marrakech", "Rabat", "Fes", "Tangier", "Agadir", "Essaouira"];
+
+const bleisurePackageFormSchema = insertBleisurePackageSchema.omit({ 
+  id: true, 
+  providerId: true, 
+  createdAt: true, 
+  updatedAt: true, 
+  status: true 
+}).extend({
+  businessInclusions: z.array(z.string()).default([]),
+  leisureInclusions: z.array(z.string()).default([]),
+  photos: z.array(z.string()).default([]),
+});
+
+const coworkingSpaceFormSchema = insertCoworkingSpaceSchema.omit({ 
+  id: true, 
+  providerId: true, 
+  createdAt: true, 
+  verified: true,
+  rating: true,
+}).extend({
+  amenities: z.array(z.string()).default([]),
+  photos: z.array(z.string()).default([]),
+  openingHours: z.record(z.any()).default({}),
+});
 
 export default function Bleisure() {
   const { toast } = useToast();
@@ -35,6 +64,46 @@ export default function Bleisure() {
   const { data: coworkingSpaces = [], isLoading: loadingSpaces } = useQuery({
     queryKey: ['/api/coworking-spaces', selectedCity],
     enabled: selectedCity !== "all" || true,
+  });
+
+  const packageForm = useForm<z.infer<typeof bleisurePackageFormSchema>>({
+    resolver: zodResolver(bleisurePackageFormSchema),
+    defaultValues: {
+      title: '',
+      description: '',
+      city: '',
+      businessDays: 1,
+      leisureDays: 1,
+      businessInclusions: [],
+      leisureInclusions: [],
+      pricePerPersonMad: 1000,
+      minParticipants: 1,
+      maxParticipants: 10,
+      availableFrom: new Date(),
+      availableTo: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      coworkingIncluded: false,
+      photos: [],
+    },
+  });
+
+  const spaceForm = useForm<z.infer<typeof coworkingSpaceFormSchema>>({
+    resolver: zodResolver(coworkingSpaceFormSchema),
+    defaultValues: {
+      name: '',
+      description: '',
+      city: '',
+      address: '',
+      capacity: 1,
+      amenities: [],
+      hourlyRateMad: 50,
+      dailyRateMad: 300,
+      monthlyRateMad: 5000,
+      meetingRoomsAvailable: 0,
+      highSpeedInternet: true,
+      prayerRoom: false,
+      photos: [],
+      openingHours: {},
+    },
   });
 
   const bookingMutation = useMutation({
@@ -59,14 +128,15 @@ export default function Bleisure() {
   });
 
   const createPackageMutation = useMutation({
-    mutationFn: async (data: any) => {
-      return apiRequest('POST', '/api/bleisure-packages', data);
+    mutationFn: async (data: z.infer<typeof bleisurePackageFormSchema>) => {
+      return apiRequest('POST', '/api/bleisure-packages', { ...data, status: 'active' });
     },
     onSuccess: () => {
       toast({
         title: "Package created",
         description: "Your bleisure package has been added successfully.",
       });
+      packageForm.reset();
       setCreatePackageOpen(false);
       queryClient.invalidateQueries({ queryKey: ['/api/bleisure-packages'] });
     },
@@ -80,7 +150,7 @@ export default function Bleisure() {
   });
 
   const createSpaceMutation = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (data: z.infer<typeof coworkingSpaceFormSchema>) => {
       return apiRequest('POST', '/api/coworking-spaces', data);
     },
     onSuccess: () => {
@@ -88,6 +158,7 @@ export default function Bleisure() {
         title: "Coworking space created",
         description: "Your coworking space has been added successfully.",
       });
+      spaceForm.reset();
       setCreateSpaceOpen(false);
       queryClient.invalidateQueries({ queryKey: ['/api/coworking-spaces'] });
     },
@@ -154,124 +225,240 @@ export default function Bleisure() {
                     Offer a combined business and leisure travel package
                   </DialogDescription>
                 </DialogHeader>
-                <form onSubmit={(e) => {
-                  e.preventDefault();
-                  const formData = new FormData(e.currentTarget);
-                  createPackageMutation.mutate({
-                    name: formData.get('name'),
-                    description: formData.get('description'),
-                    city: formData.get('city'),
-                    durationDays: parseInt(formData.get('durationDays') as string),
-                    durationNights: parseInt(formData.get('durationNights') as string),
-                    pricePerPersonMad: parseFloat(formData.get('pricePerPersonMad') as string),
-                    includesCoworking: formData.get('includesCoworking') === 'on',
-                    coworkingHours: parseInt(formData.get('coworkingHours') as string) || null,
-                    status: 'active',
-                  });
-                }}>
-                  <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="pkg-name">Package Name *</Label>
-                      <Input
-                        id="pkg-name"
-                        name="name"
-                        placeholder="Marrakech Business & Culture Experience"
-                        required
-                        data-testid="input-package-name"
+                <Form {...packageForm}>
+                  <form onSubmit={packageForm.handleSubmit((data) => createPackageMutation.mutate(data))}>
+                    <div className="space-y-4 py-4">
+                      <FormField
+                        control={packageForm.control}
+                        name="title"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Package Title *</FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="Marrakech Business & Culture Experience"
+                                data-testid="input-package-name"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
                       />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="pkg-description">Description *</Label>
-                      <Textarea
-                        id="pkg-description"
+                      <FormField
+                        control={packageForm.control}
                         name="description"
-                        placeholder="Describe what's included in this package..."
-                        rows={3}
-                        required
-                        data-testid="input-package-description"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Description *</FormLabel>
+                            <FormControl>
+                              <Textarea
+                                placeholder="Describe what's included in this package..."
+                                rows={3}
+                                data-testid="input-package-description"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
                       />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="pkg-city">City *</Label>
-                        <Select name="city" required>
-                          <SelectTrigger data-testid="select-package-city">
-                            <SelectValue placeholder="Select city" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {MOROCCO_CITIES.map((city) => (
-                              <SelectItem key={city} value={city}>{city}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="pkg-price">Price per Person (MAD) *</Label>
-                        <Input
-                          id="pkg-price"
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                          control={packageForm.control}
+                          name="city"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>City *</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl>
+                                  <SelectTrigger data-testid="select-package-city">
+                                    <SelectValue placeholder="Select city" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {MOROCCO_CITIES.map((city) => (
+                                    <SelectItem key={city} value={city}>{city}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={packageForm.control}
                           name="pricePerPersonMad"
-                          type="number"
-                          step="0.01"
-                          placeholder="5000"
-                          min="0"
-                          required
-                          data-testid="input-package-price"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Price per Person (MAD) *</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  placeholder="5000"
+                                  min="0"
+                                  data-testid="input-package-price"
+                                  {...field}
+                                  onChange={(e) => field.onChange(parseInt(e.target.value))}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
                         />
                       </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="pkg-days">Duration (Days) *</Label>
-                        <Input
-                          id="pkg-days"
-                          name="durationDays"
-                          type="number"
-                          placeholder="5"
-                          min="1"
-                          required
-                          data-testid="input-package-days"
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                          control={packageForm.control}
+                          name="businessDays"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Business Days *</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  placeholder="3"
+                                  min="1"
+                                  data-testid="input-package-days"
+                                  {...field}
+                                  onChange={(e) => field.onChange(parseInt(e.target.value))}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={packageForm.control}
+                          name="leisureDays"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Leisure Days *</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  placeholder="2"
+                                  min="0"
+                                  data-testid="input-package-nights"
+                                  {...field}
+                                  onChange={(e) => field.onChange(parseInt(e.target.value))}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
                         />
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="pkg-nights">Duration (Nights) *</Label>
-                        <Input
-                          id="pkg-nights"
-                          name="durationNights"
-                          type="number"
-                          placeholder="4"
-                          min="0"
-                          required
-                          data-testid="input-package-nights"
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                          control={packageForm.control}
+                          name="minParticipants"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Min Participants *</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  placeholder="1"
+                                  min="1"
+                                  data-testid="input-min-participants"
+                                  {...field}
+                                  onChange={(e) => field.onChange(parseInt(e.target.value))}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={packageForm.control}
+                          name="maxParticipants"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Max Participants *</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  placeholder="10"
+                                  min="1"
+                                  data-testid="input-max-participants"
+                                  {...field}
+                                  onChange={(e) => field.onChange(parseInt(e.target.value))}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
                         />
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2 pt-2">
-                      <Switch name="includesCoworking" id="includesCoworking" data-testid="switch-includes-coworking" />
-                      <Label htmlFor="includesCoworking" className="cursor-pointer">
-                        Includes Coworking Space Access
-                      </Label>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="pkg-coworking-hours">Coworking Hours (optional)</Label>
-                      <Input
-                        id="pkg-coworking-hours"
-                        name="coworkingHours"
-                        type="number"
-                        placeholder="40"
-                        min="0"
-                        data-testid="input-coworking-hours"
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                          control={packageForm.control}
+                          name="availableFrom"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Available From *</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="date"
+                                  data-testid="input-available-from"
+                                  value={field.value instanceof Date ? field.value.toISOString().split('T')[0] : ''}
+                                  onChange={(e) => field.onChange(new Date(e.target.value))}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={packageForm.control}
+                          name="availableTo"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Available To *</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="date"
+                                  data-testid="input-available-to"
+                                  value={field.value instanceof Date ? field.value.toISOString().split('T')[0] : ''}
+                                  onChange={(e) => field.onChange(new Date(e.target.value))}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                      <FormField
+                        control={packageForm.control}
+                        name="coworkingIncluded"
+                        render={({ field }) => (
+                          <FormItem className="flex items-center gap-2 pt-2">
+                            <FormControl>
+                              <Switch
+                                id="coworkingIncluded"
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                                data-testid="switch-includes-coworking"
+                              />
+                            </FormControl>
+                            <Label htmlFor="coworkingIncluded" className="cursor-pointer">
+                              Includes Coworking Space Access
+                            </Label>
+                          </FormItem>
+                        )}
                       />
                     </div>
-                  </div>
-                  <DialogFooter>
-                    <Button type="button" variant="outline" onClick={() => setCreatePackageOpen(false)}>
-                      Cancel
-                    </Button>
-                    <Button type="submit" disabled={createPackageMutation.isPending} data-testid="button-submit-package">
-                      {createPackageMutation.isPending ? "Creating..." : "Create Package"}
-                    </Button>
-                  </DialogFooter>
-                </form>
+                    <DialogFooter>
+                      <Button type="button" variant="outline" onClick={() => setCreatePackageOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button type="submit" disabled={createPackageMutation.isPending} data-testid="button-submit-package">
+                        {createPackageMutation.isPending ? "Creating..." : "Create Package"}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </Form>
               </DialogContent>
             </Dialog>
 
@@ -289,145 +476,267 @@ export default function Bleisure() {
                     List your coworking space for business travelers
                   </DialogDescription>
                 </DialogHeader>
-                <form onSubmit={(e) => {
-                  e.preventDefault();
-                  const formData = new FormData(e.currentTarget);
-                  const amenities = formData.get('amenities') ? 
-                    (formData.get('amenities') as string).split(',').map(a => a.trim()) : [];
-                  
-                  createSpaceMutation.mutate({
-                    name: formData.get('name'),
-                    description: formData.get('description'),
-                    city: formData.get('city'),
-                    address: formData.get('address'),
-                    capacity: parseInt(formData.get('capacity') as string),
-                    hourlyRateMad: parseFloat(formData.get('hourlyRateMad') as string) || null,
-                    dailyRateMad: parseFloat(formData.get('dailyRateMad') as string) || null,
-                    monthlyRateMad: parseFloat(formData.get('monthlyRateMad') as string) || null,
-                    amenities,
-                    verified: false,
-                    status: 'active',
-                  });
-                }}>
-                  <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="space-name">Space Name *</Label>
-                      <Input
-                        id="space-name"
+                <Form {...spaceForm}>
+                  <form onSubmit={spaceForm.handleSubmit((data) => createSpaceMutation.mutate(data))}>
+                    <div className="space-y-4 py-4">
+                      <FormField
+                        control={spaceForm.control}
                         name="name"
-                        placeholder="Downtown Coworking Hub"
-                        required
-                        data-testid="input-space-name"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Space Name *</FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="Downtown Coworking Hub"
+                                data-testid="input-space-name"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
                       />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="space-description">Description *</Label>
-                      <Textarea
-                        id="space-description"
+                      <FormField
+                        control={spaceForm.control}
                         name="description"
-                        placeholder="Describe your coworking space, facilities, and atmosphere..."
-                        rows={3}
-                        required
-                        data-testid="input-space-description"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Description *</FormLabel>
+                            <FormControl>
+                              <Textarea
+                                placeholder="Describe your coworking space, facilities, and atmosphere..."
+                                rows={3}
+                                data-testid="input-space-description"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
                       />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="space-city">City *</Label>
-                        <Select name="city" required>
-                          <SelectTrigger data-testid="select-space-city">
-                            <SelectValue placeholder="Select city" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {MOROCCO_CITIES.map((city) => (
-                              <SelectItem key={city} value={city}>{city}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="space-capacity">Capacity *</Label>
-                        <Input
-                          id="space-capacity"
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                          control={spaceForm.control}
+                          name="city"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>City *</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl>
+                                  <SelectTrigger data-testid="select-space-city">
+                                    <SelectValue placeholder="Select city" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {MOROCCO_CITIES.map((city) => (
+                                    <SelectItem key={city} value={city}>{city}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={spaceForm.control}
                           name="capacity"
-                          type="number"
-                          placeholder="50"
-                          min="1"
-                          required
-                          data-testid="input-space-capacity"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Capacity *</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  placeholder="50"
+                                  min="1"
+                                  data-testid="input-space-capacity"
+                                  {...field}
+                                  onChange={(e) => field.onChange(parseInt(e.target.value))}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
                         />
                       </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="space-address">Address *</Label>
-                      <Input
-                        id="space-address"
+                      <FormField
+                        control={spaceForm.control}
                         name="address"
-                        placeholder="123 Boulevard Mohammed V"
-                        required
-                        data-testid="input-space-address"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Address *</FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="123 Boulevard Mohammed V"
+                                data-testid="input-space-address"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
                       />
-                    </div>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="space-hourly">Hourly Rate (MAD)</Label>
-                        <Input
-                          id="space-hourly"
+                      <div className="grid grid-cols-3 gap-4">
+                        <FormField
+                          control={spaceForm.control}
                           name="hourlyRateMad"
-                          type="number"
-                          step="0.01"
-                          placeholder="50"
-                          min="0"
-                          data-testid="input-space-hourly"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Hourly Rate (MAD)</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  placeholder="50"
+                                  min="0"
+                                  data-testid="input-space-hourly"
+                                  {...field}
+                                  value={field.value || ''}
+                                  onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : null)}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
                         />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="space-daily">Daily Rate (MAD)</Label>
-                        <Input
-                          id="space-daily"
+                        <FormField
+                          control={spaceForm.control}
                           name="dailyRateMad"
-                          type="number"
-                          step="0.01"
-                          placeholder="300"
-                          min="0"
-                          data-testid="input-space-daily"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Daily Rate (MAD)</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  placeholder="300"
+                                  min="0"
+                                  data-testid="input-space-daily"
+                                  {...field}
+                                  value={field.value || ''}
+                                  onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : null)}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
                         />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="space-monthly">Monthly Rate (MAD)</Label>
-                        <Input
-                          id="space-monthly"
+                        <FormField
+                          control={spaceForm.control}
                           name="monthlyRateMad"
-                          type="number"
-                          step="0.01"
-                          placeholder="5000"
-                          min="0"
-                          data-testid="input-space-monthly"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Monthly Rate (MAD)</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  placeholder="5000"
+                                  min="0"
+                                  data-testid="input-space-monthly"
+                                  {...field}
+                                  value={field.value || ''}
+                                  onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : null)}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
                         />
                       </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="space-amenities">Amenities (comma-separated)</Label>
-                      <Input
-                        id="space-amenities"
+                      <FormField
+                        control={spaceForm.control}
                         name="amenities"
-                        placeholder="WiFi, Coffee, Meeting Rooms, Prayer Room"
-                        data-testid="input-space-amenities"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Amenities (comma-separated)</FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="WiFi, Coffee, Meeting Rooms, Prayer Room"
+                                data-testid="input-space-amenities"
+                                value={field.value?.join(', ') || ''}
+                                onChange={(e) => {
+                                  const amenitiesArray = e.target.value
+                                    ? e.target.value.split(',').map(a => a.trim()).filter(Boolean)
+                                    : [];
+                                  field.onChange(amenitiesArray);
+                                }}
+                              />
+                            </FormControl>
+                            <p className="text-xs text-muted-foreground">
+                              Enter amenities separated by commas
+                            </p>
+                            <FormMessage />
+                          </FormItem>
+                        )}
                       />
-                      <p className="text-xs text-muted-foreground">
-                        Enter amenities separated by commas
-                      </p>
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                          control={spaceForm.control}
+                          name="highSpeedInternet"
+                          render={({ field }) => (
+                            <FormItem className="flex items-center gap-2">
+                              <FormControl>
+                                <Switch
+                                  id="highSpeedInternet"
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                  data-testid="switch-high-speed-internet"
+                                />
+                              </FormControl>
+                              <Label htmlFor="highSpeedInternet" className="cursor-pointer">
+                                High-Speed Internet
+                              </Label>
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={spaceForm.control}
+                          name="prayerRoom"
+                          render={({ field }) => (
+                            <FormItem className="flex items-center gap-2">
+                              <FormControl>
+                                <Switch
+                                  id="prayerRoom"
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                  data-testid="switch-prayer-room"
+                                />
+                              </FormControl>
+                              <Label htmlFor="prayerRoom" className="cursor-pointer">
+                                Prayer Room Available
+                              </Label>
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                      <FormField
+                        control={spaceForm.control}
+                        name="meetingRoomsAvailable"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Meeting Rooms Available</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                placeholder="2"
+                                min="0"
+                                data-testid="input-meeting-rooms"
+                                {...field}
+                                onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
                     </div>
-                  </div>
-                  <DialogFooter>
-                    <Button type="button" variant="outline" onClick={() => setCreateSpaceOpen(false)}>
-                      Cancel
-                    </Button>
-                    <Button type="submit" disabled={createSpaceMutation.isPending} data-testid="button-submit-space">
-                      {createSpaceMutation.isPending ? "Creating..." : "Create Space"}
-                    </Button>
-                  </DialogFooter>
-                </form>
+                    <DialogFooter>
+                      <Button type="button" variant="outline" onClick={() => setCreateSpaceOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button type="submit" disabled={createSpaceMutation.isPending} data-testid="button-submit-space">
+                        {createSpaceMutation.isPending ? "Creating..." : "Create Space"}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </Form>
               </DialogContent>
             </Dialog>
           </div>
