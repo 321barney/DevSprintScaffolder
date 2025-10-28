@@ -1,0 +1,183 @@
+PR1 — Authentication Hardening (JWT + bcrypt)
+
+Goal: replace demo auth; lock routes; add rate limits.
+
+Changes
+
+Add deps: jsonwebtoken bcryptjs express-rate-limit.
+
+.env: JWT_SECRET=... JWT_TTL=15m JWT_REFRESH_TTL=7d
+
+routes.ts
+
+On signup: hash password.
+
+import bcrypt from "bcryptjs"; import jwt from "jsonwebtoken";
+const hash = await bcrypt.hash(password, 10);
+const user = await storage.createUser({ email, password: hash, role, locale });
+
+
+On login: compare + issue tokens.
+
+const ok = await bcrypt.compare(password, user.password);
+if(!ok) return res.status(401).json({message:"invalid credentials"});
+const access = jwt.sign({ uid:user.id, roles:[user.role] }, process.env.JWT_SECRET!, { expiresIn: process.env.JWT_TTL||"15m" });
+res.json({ accessToken: access });
+
+
+Guard helper:
+
+export function requireAuth(...roles:string[]) {
+  return (req,res,next)=>{
+    const h = req.headers.authorization||""; const t=h.startsWith("Bearer ")?h.slice(7):"";
+    try {
+      const p = jwt.verify(t, process.env.JWT_SECRET! ) as any;
+      if(roles.length && !roles.some(r=>p.roles?.includes(r))) return res.status(403).end();
+      (req as any).auth = p; next();
+    } catch { return res.status(401).end(); }
+  };
+}
+
+
+Protect sensitive endpoints: posting offers (provider), accepting offers (buyer), KYC submit (provider), KYC verify (admin).
+
+Rate limit (top of index.ts):
+
+import rateLimit from "express-rate-limit";
+app.use(rateLimit({ windowMs: 60_000, max: 60 }));              // generic
+app.use("/api/auth/", rateLimit({ windowMs: 60_000, max: 10 })); // stricter
+
+
+Acceptance
+
+Plaintext passwords removed; bcrypt in DB.
+
+Protected routes reject unauthenticated/unauthorized requests (unit tests).
+
+PR2 — RBAC + Audit Log
+
+Goal: immutable trail for sensitive actions.
+
+DB (Drizzle)
+
+export const auditLog = pgTable("audit_log",{
+  id: bigserial("id",{mode:"number"}).primaryKey(),
+  at: timestamp("at").defaultNow().notNull(),
+  actor: uuid("actor").references(()=>users.id),
+  action: text("action").notNull(),          // e.g., OFFER_ACCEPT, KYC_VERIFY
+  objectType: text("object_type").notNull(), // "offer" | "job" | "kyc" | "role"
+  objectId: text("object_id").notNull(),
+  before: jsonb("before"),
+  after: jsonb("after"),
+  ip: inet("ip"),
+  ua: text("ua")
+});
+
+
+server/audit.ts
+
+export async function audit(req, action:string, objectType:string, objectId:string, before?:any, after?:any){
+  await db.insert(auditLog).values({ actor:req.auth?.uid, action, objectType, objectId, before, after, ip:req.ip, ua:req.headers["user-agent"] });
+}
+
+
+Wire it in routes.ts where you: accept/decline offers, verify KYC, change roles.
+
+Acceptance
+
+Audit rows created for each sensitive action with actor & before/after snapshot.
+
+Read-only API GET /api/admin/audit?limit=100 (admin only).
+
+PR3 — Real-Time Offers (WebSocket)
+
+Goal: buyer sees bids live; provider gets job updates.
+
+server/index.ts
+
+import { createServer } from "http"; import { Server as IOServer } from "socket.io";
+const httpServer = createServer(app);
+const io = new IOServer(httpServer,{ cors:{origin:true, credentials:true} });
+
+io.use((socket,next)=>{ /* verify JWT from `auth.token` */ next(); });
+
+io.on("connection",(socket)=>{
+  socket.on("join:job", (jobId:string)=> socket.join(`job:${jobId}`));
+});
+
+export function emitOfferUpdate(jobId:string, offer:any){
+  io.to(`job:${jobId}`).emit("offer.updated", offer);
+}
+
+
+server/routes.ts
+
+After creating/updating an offer: emitOfferUpdate(jobId, sanitizedOffer);
+
+client
+
+Connect on JobDetail mount; socket.emit("join:job", jobId); update list on offer.updated.
+
+Acceptance
+
+New offers appear for the buyer within ~1s without refresh (happy-path test).
+
+PR4 — KYC File Uploads (presigned flow)
+
+Goal: persist provider docs safely (S3/Cloudinary/MinIO).
+
+server/storage.ts (new util)
+
+Add S3/MinIO client; endpoint: POST /api/files/presign → returns url, fields for direct upload.
+
+Endpoint: POST /api/kyc/submit with uploaded file keys + metadata (type, expiry).
+
+shared/schema.ts (add)
+
+export const files = pgTable("files",{
+  id: uuid("id").primaryKey().defaultRandom(),
+  owner: uuid("owner").references(()=>users.id),
+  url: text("url").notNull(),
+  mime: text("mime").notNull(),
+  sha256: text("sha256"),
+  createdAt: timestamp("created_at").defaultNow().notNull()
+});
+
+
+Acceptance
+
+Providers can upload permit/insurance; admin can view & verify; files not stored in repo, only in bucket.
+
+Bonus (fits your repo right now)
+Idempotency for accepting offers
+
+Create idempotency_key table and wrap POST /api/offers/:id/accept so repeated requests return the stored response (prevents double accept).
+
+Password migration (you already have server/migrate-passwords.ts)
+
+Run a one-off script to hash any legacy plaintext passwords:
+
+node ./server/migrate-passwords.ts
+
+
+(Ensure it reads each user, detects unhashed values, replaces with bcrypt hash.)
+
+Test Checklist (drop in tests/*.spec.ts)
+
+Auth: signup/login fails with wrong password; JWT guard blocks/permits by role.
+
+RBAC: provider can’t accept; buyer can; admin can verify KYC.
+
+Audit: accepting an offer writes one row with actor + before/after.
+
+WS: posting an offer triggers offer.updated to job room.
+
+KYC: presign returns URL; submit stores metadata; non-owner can’t read.
+
+Minimal env to add
+JWT_SECRET=change-me
+JWT_TTL=15m
+S3_ENDPOINT=https://s3.example.com
+S3_BUCKET=soukmatch-kyc
+S3_ACCESS_KEY=...
+S3_SECRET_KEY=...
