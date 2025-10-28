@@ -1,0 +1,273 @@
+Goal: An autonomous-but-supervised Dev Agent that plans sprints, scaffolds repos, generates code/tests, writes docs, opens PRs, and ships the MVP.
+
+MVP tech stack (lean, Morocco-ready):
+
+Mobile: Flutter
+
+Backend: TypeScript NestJS (REST + WebSockets), Postgres, Redis
+
+Infra: Docker, Fly.io/Render (fast), Supabase (Auth + storage), Cloudflare (edge)
+
+Payments: local (CMI/Payzone partner) + Stripe for fallback
+
+Maps/Geocoding: Mapbox or Google Maps
+
+Notifications: Firebase + WhatsApp (Twilio/360dialog)
+
+2) Dev Agent: “system prompt” (drop-in)
+You are SoukMatch Dev Agent (“SM-Dev”). You lead a monorepo build for a bid/offer marketplace (transport, tours, B2B services, and car loans/leases). 
+Priorities: security, correctness, test coverage, clear docs, small PRs. 
+Deliverables each sprint: backlog grooming → scaffolds → typed APIs → DB migrations → unit/integration tests → CI passing → deploy. 
+Never hardcode secrets. Generate env samples. Write READMEs. Propose sensible defaults for Morocco (FR/AR/EN).
+
+3) Tools you give the Agent (function-calling)
+
+Implement these as tool endpoints the agent can call. (Names are examples—you’ll wire them to GitHub/Linear/etc.)
+
+Repo & Code
+
+{"name":"git_create_repo","description":"Create monorepo",
+ "parameters":{"type":"object","properties":{"name":{"type":"string"},"private":{"type":"boolean"}},"required":["name"]}}
+{"name":"git_open_pr","description":"Open a PR","parameters":{"type":"object","properties":{"branch":{"type":"string"},"title":{"type":"string"},"body":{"type":"string"}},"required":["branch","title"]}}
+{"name":"git_write_path","description":"Write/overwrite file",
+ "parameters":{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"},"branch":{"type":"string"}},"required":["path","content"]}}
+
+
+Work tracking & CI/CD
+
+{"name":"pm_create_issue","parameters":{"type":"object","properties":{"title":{"type":"string"},"body":{"type":"string"},"labels":{"type":"array","items":{"type":"string"}}}}}
+{"name":"ci_run_pipeline","parameters":{"type":"object","properties":{"env":{"type":"string"}},"required":["env"]}}
+{"name":"deploy_service","parameters":{"type":"object","properties":{"service":{"type":"string"},"env":{"type":"string"}},"required":["service","env"]}}
+
+
+Docs & Knowledge (RAG)
+
+{"name":"kb_add_doc","parameters":{"type":"object","properties":{"title":{"type":"string"},"content_md":{"type":"string"}}}}
+
+4) Monorepo skeleton the Agent should generate
+soukmatch/
+  apps/
+    api/            # NestJS
+    mobile/         # Flutter
+    worker/         # queues (bullmq)
+  packages/
+    shared/         # TS types & OpenAPI client
+  infra/
+    docker/         # Dockerfiles
+    db/             # migrations (Prisma or TypeORM)
+  .github/workflows/ci.yml
+  README.md
+
+5) First DB model (Postgres) — migrations v1
+-- users & providers
+create table app_user(
+  id uuid primary key default gen_random_uuid(),
+  role text check (role in ('buyer','provider','admin')) not null,
+  email text unique, phone text, locale text default 'fr-MA',
+  created_at timestamptz default now()
+);
+
+create table provider(
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references app_user(id) unique,
+  display_name text not null, city text, rating numeric default 0,
+  permits jsonb default '{}'::jsonb, verified boolean default false
+);
+
+-- jobs & offers
+create table job(
+  id uuid primary key default gen_random_uuid(),
+  buyer_id uuid references app_user(id),
+  category text check (category in ('transport','tour','service','financing')) not null,
+  city text, spec jsonb not null, budget_hint_mad int, status text default 'open',
+  created_at timestamptz default now()
+);
+
+create table offer(
+  id uuid primary key default gen_random_uuid(),
+  job_id uuid references job(id),
+  provider_id uuid references provider(id),
+  price_mad int, eta_min int, notes text, ai_score numeric,
+  compliance jsonb, expires_at timestamptz, status text default 'pending',
+  created_at timestamptz default now()
+);
+
+-- financing offers (broker model)
+create table financing_offer(
+  id uuid primary key default gen_random_uuid(),
+  job_id uuid references job(id),
+  lender_code text, type text check (type in ('loan','lease')),
+  apr numeric, term_months int, down_payment_mad int, monthly_mad int,
+  conditions jsonb, prequal boolean default true
+);
+
+-- messages & ratings
+create table message(
+  id uuid primary key default gen_random_uuid(),
+  job_id uuid references job(id), sender uuid references app_user(id),
+  body text, meta jsonb, created_at timestamptz default now()
+);
+
+create table rating(
+  id uuid primary key default gen_random_uuid(),
+  job_id uuid references job(id), rater uuid references app_user(id),
+  ratee uuid references app_user(id), score int check (score between 1 and 5),
+  tags text[], created_at timestamptz default now()
+);
+
+6) API contracts (OpenAPI-first; generated by agent)
+
+Auth & profile
+
+POST /auth/signup, POST /auth/login, GET /me
+
+POST /providers (submit KYC), GET /providers/:id
+
+Jobs & Offers
+
+POST /jobs (free text or structured spec; server will run AI structuring)
+
+GET /jobs/:id, POST /jobs/:id/cancel
+
+POST /jobs/:id/offers (providers bid)
+
+POST /offers/:id/accept → creates PO/contract or starts ride
+
+GET /jobs/:id/offers (buyer view); providers only see their own
+
+AI endpoints (server-internal, but documented)
+
+POST /ai/structure-job → expands free text to spec + constraints
+
+POST /ai/price-band → returns fair MAD range
+
+POST /ai/score-offer → returns ai_score breakdown
+
+POST /ai/contract-draft → bilingual PO/contract (FR/AR)
+
+Financing (broker)
+
+POST /financing/prequal (collect docs, compute DTI estimate)
+
+POST /financing/:jobId/submit (route to lenders)
+
+GET /financing/:jobId/offers
+
+7) Matching & pricing (agent-coded modules)
+
+price-band.ts (first pass)
+
+export function priceBand(input:{city:string, category:'transport'|'tour'|'service', km?:number, pax?:number, time:string}) {
+  // heuristic bootstrap; refine with data later
+  const base = (input.category==='transport' ? 8 : 20); // MAD per km or unit
+  const surge = /(?:23:|00:|Fri)/.test(input.time) ? 1.15 : 1.0;
+  const km = input.km ?? 10;
+  const low = Math.round(base*km*0.85*surge);
+  const high = Math.round(base*km*1.15*surge);
+  return {low, high};
+}
+
+
+score-offer.ts
+
+export function scoreOffer(p:{fit:number, eta:number, price:number, fair:{low:number, high:number}, rating:number, reliability:number, compliance:number, distance:number}) {
+  const priceNorm = p.price < p.fair.low ? 0.7 : p.price > p.fair.high ? 0.6 : 1.0;
+  const score = 0.25*p.fit + 0.20*(1-p.eta) + 0.20*priceNorm + 0.15*p.reliability + 0.10*p.rating + 0.07*p.compliance + 0.03*(1-p.distance);
+  return Number(score.toFixed(3));
+}
+
+8) How the Agent works day-to-day (loop)
+
+Backlog synth: reads master spec → creates week plan via pm_create_issue.
+
+Scaffold: creates monorepo + CI with git_create_repo, writes code via git_write_path.
+
+Contracts & types: generates OpenAPI + shared TS client in packages/shared.
+
+DB & migrations: writes SQL/Prisma, seeds with fixtures.
+
+Tests: creates unit + supertest integration; runs ci_run_pipeline.
+
+Docs: adds README.md, CONTRIBUTING.md, API docs to kb with kb_add_doc.
+
+PRs: opens small PRs (git_open_pr), awaits human review.
+
+Deploy: after green CI, calls deploy_service for api (staging), then mobile (TestFlight/internal).
+
+9) Guardrails & policies (bake into the Agent)
+
+Secrets: require .env.example; never commit secrets.
+
+PII: mask in logs; GDPR-style consent; delete exports on request.
+
+Compliance: transport permits & insurance required to bid; financing flows keep you as broker only.
+
+Safety: moderation on chat (no off-platform payment solicitations).
+
+10) Kickoff runbook (Day 0–3)
+
+Day 0
+
+Create GitHub org + Supabase project + Fly.io/Render account.
+
+Generate API keys; store in vault.
+
+Invite the Dev Agent to tools (GitHub/Linear/Render) with least-privilege.
+
+Day 1 (Agent run)
+
+git_create_repo(name:"soukmatch", private:true)
+
+Write initial files: license, README, turborepo config, Dockerfiles, CI.
+
+Scaffold NestJS app with healthcheck; Flutter app with 2 screens (Sign-in, Post Job).
+
+Add OpenAPI stub & DB migrations v1 (above).
+
+Day 2
+
+Implement /jobs + /offers + AI structuring stub.
+
+Add priceBand + scoreOffer.
+
+Add Supabase Auth (email/OTP) & provider KYC models.
+
+Day 3
+
+Wire payments pre-auth (sandbox), WhatsApp notifications (sandbox).
+
+Ship staging deployment.
+
+Smoke tests on posting a transport job and accepting an offer.
+
+11) Provider KYC (Agent generates forms & checks)
+
+Identity: CIN/Passport, selfie match.
+
+Transport: VTC/tourism transport permit, vehicle registration, insurance.
+
+Company (B2B): ICE/RC/IF, liability insurance.
+
+Auto-expiry reminders + blocking rules.
+
+12) UX copy templates (Agent writes these in FR/AR/EN)
+
+“Post a job” free-text prompt → AI structure confirmation.
+
+Offer comparison cards (price, ETA, badges, score).
+
+Acceptance screen with cancel/no-show policy summary.
+
+Financing prequal: consent, doc checklist, soft-check notice.
+
+13) Sprint 1 deliverables (end of week 2)
+
+Staging API with /jobs, /offers, auth, basic matching.
+
+Flutter app: sign-in, job posting, live offer feed, accept flow.
+
+KYC upload + manual review dashboard.
+
+CI green, 70% unit coverage on core services.
+
+Docs: API reference, env setup, run scripts.
