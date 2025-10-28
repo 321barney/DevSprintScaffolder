@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
-import { Map, Marker, Popup } from "react-map-gl/maplibre";
+import { Map as MapboxMap, Marker, Popup } from "react-map-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { MapPin, User, Briefcase } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,16 +39,35 @@ interface MapViewProps {
   onJobClick?: (job: Job) => void;
 }
 
-const MAPBOX_TOKEN = "pk.eyJ1IjoicmVwbGl0IiwiYSI6ImNtMmd0MzgzMjAwYXMyanM4aGU1N2FkbTUifQ.qL8xbxL-d-xPzYtLLJTt4Q";
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || "";
 
 export default function MapView({ providers, jobs, onProviderClick, onJobClick }: MapViewProps) {
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [mapError, setMapError] = useState<string | null>(null);
   const [viewState, setViewState] = useState({
     longitude: -7.6,
     latitude: 33.6,
     zoom: 6,
   });
+
+  if (!MAPBOX_TOKEN) {
+    return (
+      <div className="relative w-full h-full flex items-center justify-center bg-muted">
+        <Card className="max-w-md">
+          <CardHeader>
+            <CardTitle>Map Configuration Required</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              The map cannot be displayed because the Mapbox access token is not configured. 
+              Please add VITE_MAPBOX_ACCESS_TOKEN to your environment variables.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const providersWithLocation = useMemo(() => 
     providers.filter(p => p.profile?.latitude && p.profile?.longitude),
@@ -108,9 +127,10 @@ export default function MapView({ providers, jobs, onProviderClick, onJobClick }
           </div>
         </div>
       </div>
-      <Map
+      <MapboxMap
         {...viewState}
         onMove={(evt: any) => setViewState(evt.viewState)}
+        onError={(evt: any) => setMapError(evt.error?.message || "Failed to load map")}
         mapStyle="mapbox://styles/mapbox/light-v11"
         mapboxAccessToken={MAPBOX_TOKEN}
         style={{ width: "100%", height: "100%" }}
@@ -268,7 +288,7 @@ export default function MapView({ providers, jobs, onProviderClick, onJobClick }
             </Card>
           </Popup>
         )}
-      </Map>
+      </MapboxMap>
 
       <div className="absolute top-4 left-4 bg-background/95 backdrop-blur-sm rounded-lg shadow-lg p-4 space-y-2 border">
         <div className="text-sm font-semibold">Map Legend</div>
