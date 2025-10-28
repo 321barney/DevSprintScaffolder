@@ -8,6 +8,8 @@ import { providers } from "@shared/schema";
 import { generateDynamicPriceBand, scoreOffer as scoreOfferWithAI } from "./services/ai-pricing";
 import { canProviderSubmitOffer, consumeFreeOffer, incrementPaidOfferCounter, processOfferAcceptance, getOrCreateSubscription } from "./services/commission";
 import { logAudit, AUDIT_ACTIONS } from "./audit";
+import { dispatchNotification } from "./services/notifications";
+import { syncCardTransactions, reconcileExpenses, autoReconcileExpense } from "./services/expense-reconciliation";
 import { 
   insertUserSchema, insertProviderSchema, insertJobSchema, insertOfferSchema, 
   insertMessageSchema, insertRatingSchema, insertVenueSchema, insertVenueRoomSchema,
@@ -1714,6 +1716,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/fam-trip-registrations/:id", requireAuth, asyncHandler(async (req, res) => {
     const registration = await storage.updateFamTripRegistration(req.params.id, req.body);
     res.json(registration);
+  }));
+
+  // Virtual Card Sync & Reconciliation
+  app.post("/api/virtual-cards/:id/sync", requireAuth, asyncHandler(async (req, res) => {
+    const card = await storage.getVirtualCard(req.params.id);
+    if (!card) {
+      return res.status(404).json({ error: "Virtual card not found" });
+    }
+    
+    const syncedCount = await syncCardTransactions(card);
+    res.json({ syncedCount, message: `Synced ${syncedCount} new transactions` });
+  }));
+
+  app.get("/api/expense-entries/reconciliation/:companyId", requireAuth, asyncHandler(async (req, res) => {
+    const stats = await reconcileExpenses(req.params.companyId);
+    res.json(stats);
+  }));
+
+  app.post("/api/expense-entries/:id/auto-reconcile", requireAuth, asyncHandler(async (req, res) => {
+    const success = await autoReconcileExpense(req.params.id);
+    res.json({ success, message: success ? 'Expense auto-reconciled' : 'Auto-reconciliation failed' });
   }));
 
   // SEO Landing Pages - Dynamic venue search by city (uses existing venues API with SEO-friendly params)
