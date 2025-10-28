@@ -4,6 +4,7 @@ import {
   platformFees, providerSubscriptions, transactions, providerEarnings,
   providerProfiles, vehicles, providerDocuments, trips, tripTracks,
   companies, costCenters, travelerProfiles, venues, venueRooms, rfps, quotes, groupBookings, approvals,
+  partnerTiers, corporateRates, milestonePayments, eventReports, itineraries, disruptionAlerts, dmcPartners,
   type User, type InsertUser,
   type Provider, type InsertProvider,
   type Job, type InsertJob,
@@ -29,6 +30,13 @@ import {
   type Quote, type InsertQuote,
   type GroupBooking, type InsertGroupBooking,
   type Approval, type InsertApproval,
+  type PartnerTier, type InsertPartnerTier,
+  type CorporateRate, type InsertCorporateRate,
+  type MilestonePayment, type InsertMilestonePayment,
+  type EventReport, type InsertEventReport,
+  type Itinerary, type InsertItinerary,
+  type DisruptionAlert, type InsertDisruptionAlert,
+  type DmcPartner, type InsertDmcPartner,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc } from "drizzle-orm";
@@ -180,6 +188,55 @@ export interface IStorage {
   getPendingApprovals(approverId: string): Promise<Approval[]>;
   createApproval(approval: InsertApproval): Promise<Approval>;
   updateApproval(id: string, data: Partial<Approval>): Promise<Approval | undefined>;
+
+  // Phase 4: Partner Tiers
+  getPartnerTier(id: string): Promise<PartnerTier | undefined>;
+  getPartnerTiersByProviderId(providerId: string): Promise<PartnerTier[]>;
+  getPartnerTiersByCategory(category: string): Promise<PartnerTier[]>;
+  createPartnerTier(tier: InsertPartnerTier): Promise<PartnerTier>;
+  updatePartnerTier(id: string, data: Partial<PartnerTier>): Promise<PartnerTier | undefined>;
+
+  // Phase 4: Corporate Rates
+  getCorporateRate(id: string): Promise<CorporateRate | undefined>;
+  getCorporateRatesByCompanyId(companyId: string): Promise<CorporateRate[]>;
+  getCorporateRatesByProviderId(providerId: string): Promise<CorporateRate[]>;
+  getActiveCorporateRates(companyId: string, providerId: string): Promise<CorporateRate[]>;
+  createCorporateRate(rate: InsertCorporateRate): Promise<CorporateRate>;
+  updateCorporateRate(id: string, data: Partial<CorporateRate>): Promise<CorporateRate | undefined>;
+
+  // Phase 4: Milestone Payments
+  getMilestonePayment(id: string): Promise<MilestonePayment | undefined>;
+  getMilestonePaymentsByGroupBookingId(groupBookingId: string): Promise<MilestonePayment[]>;
+  getMilestonePaymentsByPayerId(payerId: string): Promise<MilestonePayment[]>;
+  createMilestonePayment(payment: InsertMilestonePayment): Promise<MilestonePayment>;
+  updateMilestonePayment(id: string, data: Partial<MilestonePayment>): Promise<MilestonePayment | undefined>;
+
+  // Phase 4: Event Reports
+  getEventReport(id: string): Promise<EventReport | undefined>;
+  getEventReportsByCompanyId(companyId: string): Promise<EventReport[]>;
+  createEventReport(report: InsertEventReport): Promise<EventReport>;
+
+  // Phase 4: Itineraries
+  getItinerary(id: string): Promise<Itinerary | undefined>;
+  getItinerariesByGroupBookingId(groupBookingId: string): Promise<Itinerary[]>;
+  getItinerariesByTravelerProfileId(travelerProfileId: string): Promise<Itinerary[]>;
+  createItinerary(itinerary: InsertItinerary): Promise<Itinerary>;
+  updateItinerary(id: string, data: Partial<Itinerary>): Promise<Itinerary | undefined>;
+
+  // Phase 4: Disruption Alerts
+  getDisruptionAlert(id: string): Promise<DisruptionAlert | undefined>;
+  getDisruptionAlertsByItineraryId(itineraryId: string): Promise<DisruptionAlert[]>;
+  getActiveDisruptionAlerts(itineraryId: string): Promise<DisruptionAlert[]>;
+  createDisruptionAlert(alert: InsertDisruptionAlert): Promise<DisruptionAlert>;
+  updateDisruptionAlert(id: string, data: Partial<DisruptionAlert>): Promise<DisruptionAlert | undefined>;
+
+  // Phase 4: DMC Partners
+  getDmcPartner(id: string): Promise<DmcPartner | undefined>;
+  getDmcPartnersByProviderId(providerId: string): Promise<DmcPartner[]>;
+  getDmcPartnersByDestination(destination: string): Promise<DmcPartner[]>;
+  getVerifiedDmcPartners(): Promise<DmcPartner[]>;
+  createDmcPartner(partner: InsertDmcPartner): Promise<DmcPartner>;
+  updateDmcPartner(id: string, data: Partial<DmcPartner>): Promise<DmcPartner | undefined>;
 }
 
 // Database storage implementation
@@ -846,6 +903,189 @@ export class DatabaseStorage implements IStorage {
   async updateApproval(id: string, data: Partial<Approval>): Promise<Approval | undefined> {
     const [approval] = await db.update(approvals).set(data as any).where(eq(approvals.id, id)).returning();
     return approval || undefined;
+  }
+
+  // Partner Tiers
+  async getPartnerTier(id: string): Promise<PartnerTier | undefined> {
+    const [tier] = await db.select().from(partnerTiers).where(eq(partnerTiers.id, id));
+    return tier || undefined;
+  }
+
+  async getPartnerTiersByProviderId(providerId: string): Promise<PartnerTier[]> {
+    return await db.select().from(partnerTiers).where(eq(partnerTiers.providerId, providerId)).orderBy(desc(partnerTiers.createdAt));
+  }
+
+  async getPartnerTiersByCategory(category: string): Promise<PartnerTier[]> {
+    return await db.select().from(partnerTiers).where(eq(partnerTiers.category, category)).orderBy(desc(partnerTiers.reliabilityScore));
+  }
+
+  async createPartnerTier(insertTier: InsertPartnerTier): Promise<PartnerTier> {
+    const [tier] = await db.insert(partnerTiers).values(insertTier as any).returning();
+    return tier;
+  }
+
+  async updatePartnerTier(id: string, data: Partial<PartnerTier>): Promise<PartnerTier | undefined> {
+    const [tier] = await db.update(partnerTiers).set(data as any).where(eq(partnerTiers.id, id)).returning();
+    return tier || undefined;
+  }
+
+  // Corporate Rates
+  async getCorporateRate(id: string): Promise<CorporateRate | undefined> {
+    const [rate] = await db.select().from(corporateRates).where(eq(corporateRates.id, id));
+    return rate || undefined;
+  }
+
+  async getCorporateRatesByCompanyId(companyId: string): Promise<CorporateRate[]> {
+    return await db.select().from(corporateRates).where(eq(corporateRates.companyId, companyId)).orderBy(desc(corporateRates.createdAt));
+  }
+
+  async getCorporateRatesByProviderId(providerId: string): Promise<CorporateRate[]> {
+    return await db.select().from(corporateRates).where(eq(corporateRates.providerId, providerId)).orderBy(desc(corporateRates.createdAt));
+  }
+
+  async getActiveCorporateRates(companyId: string, providerId: string): Promise<CorporateRate[]> {
+    const now = new Date();
+    return await db.select().from(corporateRates).where(
+      and(
+        eq(corporateRates.companyId, companyId),
+        eq(corporateRates.providerId, providerId)
+      )
+    );
+  }
+
+  async createCorporateRate(insertRate: InsertCorporateRate): Promise<CorporateRate> {
+    const [rate] = await db.insert(corporateRates).values(insertRate as any).returning();
+    return rate;
+  }
+
+  async updateCorporateRate(id: string, data: Partial<CorporateRate>): Promise<CorporateRate | undefined> {
+    const [rate] = await db.update(corporateRates).set(data as any).where(eq(corporateRates.id, id)).returning();
+    return rate || undefined;
+  }
+
+  // Milestone Payments
+  async getMilestonePayment(id: string): Promise<MilestonePayment | undefined> {
+    const [payment] = await db.select().from(milestonePayments).where(eq(milestonePayments.id, id));
+    return payment || undefined;
+  }
+
+  async getMilestonePaymentsByGroupBookingId(groupBookingId: string): Promise<MilestonePayment[]> {
+    return await db.select().from(milestonePayments).where(eq(milestonePayments.groupBookingId, groupBookingId)).orderBy(milestonePayments.dueDate);
+  }
+
+  async getMilestonePaymentsByPayerId(payerId: string): Promise<MilestonePayment[]> {
+    return await db.select().from(milestonePayments).where(eq(milestonePayments.payerId, payerId)).orderBy(desc(milestonePayments.createdAt));
+  }
+
+  async createMilestonePayment(insertPayment: InsertMilestonePayment): Promise<MilestonePayment> {
+    const [payment] = await db.insert(milestonePayments).values(insertPayment as any).returning();
+    return payment;
+  }
+
+  async updateMilestonePayment(id: string, data: Partial<MilestonePayment>): Promise<MilestonePayment | undefined> {
+    const [payment] = await db.update(milestonePayments).set(data as any).where(eq(milestonePayments.id, id)).returning();
+    return payment || undefined;
+  }
+
+  // Event Reports
+  async getEventReport(id: string): Promise<EventReport | undefined> {
+    const [report] = await db.select().from(eventReports).where(eq(eventReports.id, id));
+    return report || undefined;
+  }
+
+  async getEventReportsByCompanyId(companyId: string): Promise<EventReport[]> {
+    return await db.select().from(eventReports).where(eq(eventReports.companyId, companyId)).orderBy(desc(eventReports.reportPeriodEnd));
+  }
+
+  async createEventReport(insertReport: InsertEventReport): Promise<EventReport> {
+    const [report] = await db.insert(eventReports).values(insertReport as any).returning();
+    return report;
+  }
+
+  // Itineraries
+  async getItinerary(id: string): Promise<Itinerary | undefined> {
+    const [itinerary] = await db.select().from(itineraries).where(eq(itineraries.id, id));
+    return itinerary || undefined;
+  }
+
+  async getItinerariesByGroupBookingId(groupBookingId: string): Promise<Itinerary[]> {
+    return await db.select().from(itineraries).where(eq(itineraries.groupBookingId, groupBookingId)).orderBy(itineraries.startDate);
+  }
+
+  async getItinerariesByTravelerProfileId(travelerProfileId: string): Promise<Itinerary[]> {
+    return await db.select().from(itineraries).where(eq(itineraries.travelerProfileId, travelerProfileId)).orderBy(desc(itineraries.startDate));
+  }
+
+  async createItinerary(insertItinerary: InsertItinerary): Promise<Itinerary> {
+    const [itinerary] = await db.insert(itineraries).values(insertItinerary as any).returning();
+    return itinerary;
+  }
+
+  async updateItinerary(id: string, data: Partial<Itinerary>): Promise<Itinerary | undefined> {
+    const [itinerary] = await db.update(itineraries).set(data as any).where(eq(itineraries.id, id)).returning();
+    return itinerary || undefined;
+  }
+
+  // Disruption Alerts
+  async getDisruptionAlert(id: string): Promise<DisruptionAlert | undefined> {
+    const [alert] = await db.select().from(disruptionAlerts).where(eq(disruptionAlerts.id, id));
+    return alert || undefined;
+  }
+
+  async getDisruptionAlertsByItineraryId(itineraryId: string): Promise<DisruptionAlert[]> {
+    return await db.select().from(disruptionAlerts).where(eq(disruptionAlerts.itineraryId, itineraryId)).orderBy(desc(disruptionAlerts.createdAt));
+  }
+
+  async getActiveDisruptionAlerts(itineraryId: string): Promise<DisruptionAlert[]> {
+    return await db.select().from(disruptionAlerts).where(
+      and(
+        eq(disruptionAlerts.itineraryId, itineraryId),
+        eq(disruptionAlerts.resolvedAt, null as any)
+      )
+    ).orderBy(desc(disruptionAlerts.severity), desc(disruptionAlerts.createdAt));
+  }
+
+  async createDisruptionAlert(insertAlert: InsertDisruptionAlert): Promise<DisruptionAlert> {
+    const [alert] = await db.insert(disruptionAlerts).values(insertAlert as any).returning();
+    return alert;
+  }
+
+  async updateDisruptionAlert(id: string, data: Partial<DisruptionAlert>): Promise<DisruptionAlert | undefined> {
+    const [alert] = await db.update(disruptionAlerts).set(data as any).where(eq(disruptionAlerts.id, id)).returning();
+    return alert || undefined;
+  }
+
+  // DMC Partners
+  async getDmcPartner(id: string): Promise<DmcPartner | undefined> {
+    const [partner] = await db.select().from(dmcPartners).where(eq(dmcPartners.id, id));
+    return partner || undefined;
+  }
+
+  async getDmcPartnersByProviderId(providerId: string): Promise<DmcPartner[]> {
+    return await db.select().from(dmcPartners).where(eq(dmcPartners.providerId, providerId)).orderBy(desc(dmcPartners.createdAt));
+  }
+
+  async getDmcPartnersByDestination(destination: string): Promise<DmcPartner[]> {
+    return await db.select().from(dmcPartners).where(eq(dmcPartners.status, "active")).orderBy(desc(dmcPartners.rating));
+  }
+
+  async getVerifiedDmcPartners(): Promise<DmcPartner[]> {
+    return await db.select().from(dmcPartners).where(
+      and(
+        eq(dmcPartners.verified, true),
+        eq(dmcPartners.status, "active")
+      )
+    ).orderBy(desc(dmcPartners.rating));
+  }
+
+  async createDmcPartner(insertPartner: InsertDmcPartner): Promise<DmcPartner> {
+    const [partner] = await db.insert(dmcPartners).values(insertPartner as any).returning();
+    return partner;
+  }
+
+  async updateDmcPartner(id: string, data: Partial<DmcPartner>): Promise<DmcPartner | undefined> {
+    const [partner] = await db.update(dmcPartners).set(data as any).where(eq(dmcPartners.id, id)).returning();
+    return partner || undefined;
   }
 }
 
