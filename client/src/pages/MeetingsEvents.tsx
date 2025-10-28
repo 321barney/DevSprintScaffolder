@@ -1,16 +1,22 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useTranslation } from "@/lib/i18n";
 import { useApp } from "@/contexts/AppContext";
 import { useLocation } from "wouter";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { 
   Building2, CheckCircle2, FileText, Users, Wifi, 
-  Coffee, Car, Tv, MapPin, Star, Palmtree, ArrowRight 
+  Coffee, Car, Tv, MapPin, Star, Palmtree, ArrowRight, Plus 
 } from "lucide-react";
 
 type Venue = {
@@ -43,13 +49,15 @@ type VenueRoom = {
 };
 
 export default function MeetingsEvents() {
-  const { locale } = useApp();
+  const { locale, currentUser } = useApp();
   const { t } = useTranslation(locale);
+  const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [cityFilter, setCityFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [invoiceReadyOnly, setInvoiceReadyOnly] = useState(false);
+  const [createVenueOpen, setCreateVenueOpen] = useState(false);
 
   const { data: venues, isLoading } = useQuery<Venue[]>({
     queryKey: ['/api/venues', cityFilter, typeFilter, verifiedOnly, invoiceReadyOnly],
@@ -70,6 +78,27 @@ export default function MeetingsEvents() {
   const cities = ['Casablanca', 'Marrakech', 'Rabat', 'Fez', 'Tangier', 'Agadir'];
   const venueTypes = ['hotel', 'conference_center', 'restaurant', 'villa'];
 
+  const createVenueMutation = useMutation({
+    mutationFn: async (data: any) => {
+      return apiRequest('POST', '/api/venues', data);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Venue created",
+        description: "Your venue has been added successfully.",
+      });
+      setCreateVenueOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['/api/venues'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Creation failed",
+        description: error.message || "Failed to create venue.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const getAmenityIcon = (amenity: string) => {
     switch (amenity) {
       case 'wifi': return <Wifi className="w-4 h-4" />;
@@ -83,13 +112,179 @@ export default function MeetingsEvents() {
   return (
     <div className="container mx-auto p-4 md:p-6 space-y-6">
       <div className="flex flex-col gap-4">
-        <div>
-          <h1 className="text-3xl font-bold" data-testid="text-page-title">
-            {t('mice.title')}
-          </h1>
-          <p className="text-muted-foreground" data-testid="text-page-subtitle">
-            {t('mice.subtitle')}
-          </p>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-3xl font-bold" data-testid="text-page-title">
+              {t('mice.title')}
+            </h1>
+            <p className="text-muted-foreground" data-testid="text-page-subtitle">
+              {t('mice.subtitle')}
+            </p>
+          </div>
+          {currentUser?.role === 'provider' && (
+            <Dialog open={createVenueOpen} onOpenChange={setCreateVenueOpen}>
+              <DialogTrigger asChild>
+                <Button data-testid="button-create-venue">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Venue
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Create New Venue</DialogTitle>
+                  <DialogDescription>
+                    Add your meeting space, conference center, or event venue
+                  </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={(e) => {
+                  e.preventDefault();
+                  const formData = new FormData(e.currentTarget);
+                  createVenueMutation.mutate({
+                    name: formData.get('name'),
+                    description: formData.get('description'),
+                    type: formData.get('type'),
+                    city: formData.get('city'),
+                    address: formData.get('address'),
+                    totalCapacity: parseInt(formData.get('totalCapacity') as string),
+                    slaResponseHours: parseInt(formData.get('slaResponseHours') as string) || 24,
+                    amenities: {
+                      wifi: formData.get('wifi') === 'on',
+                      catering: formData.get('catering') === 'on',
+                      parking: formData.get('parking') === 'on',
+                      av: formData.get('av') === 'on',
+                    },
+                    invoiceReady: formData.get('invoiceReady') === 'on',
+                    status: 'active',
+                  });
+                }}>
+                  <div className="space-y-4 py-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="name">Venue Name *</Label>
+                        <Input
+                          id="name"
+                          name="name"
+                          placeholder="Royal Palace Hotel"
+                          required
+                          data-testid="input-venue-name"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="type">Venue Type *</Label>
+                        <Select name="type" required>
+                          <SelectTrigger data-testid="select-venue-type">
+                            <SelectValue placeholder="Select type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {venueTypes.map(type => (
+                              <SelectItem key={type} value={type}>
+                                {t(`venue.type.${type}` as any)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="description">Description *</Label>
+                      <Textarea
+                        id="description"
+                        name="description"
+                        placeholder="Describe your venue, facilities, and unique features..."
+                        rows={3}
+                        required
+                        data-testid="input-venue-description"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="city">City *</Label>
+                        <Select name="city" required>
+                          <SelectTrigger data-testid="select-venue-city">
+                            <SelectValue placeholder="Select city" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {cities.map(city => (
+                              <SelectItem key={city} value={city}>{city}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="totalCapacity">Total Capacity *</Label>
+                        <Input
+                          id="totalCapacity"
+                          name="totalCapacity"
+                          type="number"
+                          placeholder="500"
+                          min="1"
+                          required
+                          data-testid="input-venue-capacity"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="address">Address *</Label>
+                      <Input
+                        id="address"
+                        name="address"
+                        placeholder="123 Avenue Hassan II"
+                        required
+                        data-testid="input-venue-address"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="slaResponseHours">SLA Response Time (hours)</Label>
+                      <Input
+                        id="slaResponseHours"
+                        name="slaResponseHours"
+                        type="number"
+                        placeholder="24"
+                        min="1"
+                        defaultValue="24"
+                        data-testid="input-venue-sla"
+                      />
+                    </div>
+                    <div className="space-y-3">
+                      <Label>Amenities</Label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="flex items-center gap-2">
+                          <Switch name="wifi" id="wifi" data-testid="switch-wifi" />
+                          <Label htmlFor="wifi" className="cursor-pointer">WiFi</Label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Switch name="catering" id="catering" data-testid="switch-catering" />
+                          <Label htmlFor="catering" className="cursor-pointer">Catering</Label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Switch name="parking" id="parking" data-testid="switch-parking" />
+                          <Label htmlFor="parking" className="cursor-pointer">Parking</Label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Switch name="av" id="av" data-testid="switch-av" />
+                          <Label htmlFor="av" className="cursor-pointer">AV Equipment</Label>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 pt-2">
+                      <Switch name="invoiceReady" id="invoiceReady" data-testid="switch-invoice-ready" />
+                      <Label htmlFor="invoiceReady" className="cursor-pointer">
+                        Invoice Ready (VAT-compliant invoicing available)
+                      </Label>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button type="button" variant="outline" onClick={() => setCreateVenueOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={createVenueMutation.isPending} data-testid="button-submit-venue">
+                      {createVenueMutation.isPending ? "Creating..." : "Create Venue"}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
 
         <Card>
