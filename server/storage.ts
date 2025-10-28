@@ -748,27 +748,30 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getVenues(filters?: { city?: string; type?: string; verified?: boolean; invoiceReady?: boolean }): Promise<Venue[]> {
-    let query = db.select().from(venues);
+    if (!filters) {
+      return await db.select().from(venues).orderBy(desc(venues.createdAt));
+    }
+
     const conditions = [];
     
-    if (filters?.city) {
+    if (filters.city) {
       conditions.push(eq(venues.city, filters.city));
     }
-    if (filters?.type) {
+    if (filters.type) {
       conditions.push(eq(venues.type, filters.type as any));
     }
-    if (filters?.verified !== undefined) {
+    if (filters.verified !== undefined) {
       conditions.push(eq(venues.verified, filters.verified));
     }
-    if (filters?.invoiceReady !== undefined) {
+    if (filters.invoiceReady !== undefined) {
       conditions.push(eq(venues.invoiceReady, filters.invoiceReady));
     }
 
-    if (conditions.length > 0) {
-      query = query.where(and(...conditions));
+    if (conditions.length === 0) {
+      return await db.select().from(venues).orderBy(desc(venues.createdAt));
     }
 
-    return await query.orderBy(desc(venues.createdAt));
+    return await db.select().from(venues).where(and(...conditions) as any).orderBy(desc(venues.createdAt));
   }
 
   async getVenuesByProviderId(providerId: string): Promise<Venue[]> {
@@ -916,7 +919,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPartnerTiersByCategory(category: string): Promise<PartnerTier[]> {
-    return await db.select().from(partnerTiers).where(eq(partnerTiers.category, category)).orderBy(desc(partnerTiers.reliabilityScore));
+    return await db.select().from(partnerTiers).where(eq(partnerTiers.category, category as any)).orderBy(desc(partnerTiers.reliabilityScore));
   }
 
   async createPartnerTier(insertTier: InsertPartnerTier): Promise<PartnerTier> {

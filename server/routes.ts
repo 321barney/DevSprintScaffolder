@@ -12,7 +12,9 @@ import {
   insertUserSchema, insertProviderSchema, insertJobSchema, insertOfferSchema, 
   insertMessageSchema, insertRatingSchema, insertVenueSchema, insertVenueRoomSchema,
   insertRfpSchema, insertQuoteSchema, insertCompanySchema, insertCostCenterSchema,
-  insertTravelerProfileSchema, insertGroupBookingSchema, insertApprovalSchema 
+  insertTravelerProfileSchema, insertGroupBookingSchema, insertApprovalSchema,
+  insertPartnerTierSchema, insertCorporateRateSchema, insertMilestonePaymentSchema,
+  insertEventReportSchema, insertItinerarySchema, insertDisruptionAlertSchema, insertDmcPartnerSchema
 } from "@shared/schema";
 import { z } from "zod";
 
@@ -1098,6 +1100,400 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
 
     res.json(booking);
+  }));
+
+  // ===== PHASE 4: ADVANCED MICE FEATURES =====
+  
+  // Partner Tiers Routes
+  app.get("/api/partner-tiers", requireAuth, asyncHandler(async (req, res) => {
+    const { providerId, category } = req.query;
+    
+    if (providerId) {
+      const tiers = await storage.getPartnerTiersByProviderId(providerId as string);
+      return res.json(tiers);
+    }
+    
+    if (category) {
+      const tiers = await storage.getPartnerTiersByCategory(category as string);
+      return res.json(tiers);
+    }
+    
+    res.json([]);
+  }));
+
+  app.get("/api/partner-tiers/:id", requireAuth, asyncHandler(async (req, res) => {
+    const tier = await storage.getPartnerTier(req.params.id);
+    if (!tier) {
+      return res.status(404).json({ error: "Partner tier not found" });
+    }
+    res.json(tier);
+  }));
+
+  app.post("/api/partner-tiers", requireAuth, requireRole('admin'), asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const validatedData = insertPartnerTierSchema.parse(req.body);
+    const tier = await storage.createPartnerTier(validatedData);
+    
+    await logAudit({
+      userId,
+      action: 'PARTNER_TIER_CREATED',
+      resourceType: 'partner_tier',
+      resourceId: tier.id,
+      changes: validatedData,
+      req,
+    });
+
+    res.json(tier);
+  }));
+
+  app.patch("/api/partner-tiers/:id", requireAuth, requireRole('admin'), asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const tier = await storage.updatePartnerTier(req.params.id, req.body);
+    
+    await logAudit({
+      userId,
+      action: 'PARTNER_TIER_UPDATED',
+      resourceType: 'partner_tier',
+      resourceId: req.params.id,
+      changes: req.body,
+      req,
+    });
+
+    res.json(tier);
+  }));
+
+  // Corporate Rates Routes
+  app.get("/api/corporate-rates", requireAuth, asyncHandler(async (req, res) => {
+    const { companyId, providerId } = req.query;
+    
+    if (companyId && providerId) {
+      const rates = await storage.getActiveCorporateRates(companyId as string, providerId as string);
+      return res.json(rates);
+    }
+    
+    if (companyId) {
+      const rates = await storage.getCorporateRatesByCompanyId(companyId as string);
+      return res.json(rates);
+    }
+    
+    if (providerId) {
+      const rates = await storage.getCorporateRatesByProviderId(providerId as string);
+      return res.json(rates);
+    }
+    
+    res.json([]);
+  }));
+
+  app.get("/api/corporate-rates/:id", requireAuth, asyncHandler(async (req, res) => {
+    const rate = await storage.getCorporateRate(req.params.id);
+    if (!rate) {
+      return res.status(404).json({ error: "Corporate rate not found" });
+    }
+    res.json(rate);
+  }));
+
+  app.post("/api/corporate-rates", requireAuth, requireRole('admin'), asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const validatedData = insertCorporateRateSchema.parse(req.body);
+    const rate = await storage.createCorporateRate(validatedData);
+    
+    await logAudit({
+      userId,
+      action: 'CORPORATE_RATE_CREATED',
+      resourceType: 'corporate_rate',
+      resourceId: rate.id,
+      changes: validatedData,
+      req,
+    });
+
+    res.json(rate);
+  }));
+
+  app.patch("/api/corporate-rates/:id", requireAuth, requireRole('admin'), asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const rate = await storage.updateCorporateRate(req.params.id, req.body);
+    
+    await logAudit({
+      userId,
+      action: 'CORPORATE_RATE_UPDATED',
+      resourceType: 'corporate_rate',
+      resourceId: req.params.id,
+      changes: req.body,
+      req,
+    });
+
+    res.json(rate);
+  }));
+
+  // Milestone Payments Routes
+  app.get("/api/milestone-payments", requireAuth, asyncHandler(async (req, res) => {
+    const { groupBookingId, payerId } = req.query;
+    
+    if (groupBookingId) {
+      const payments = await storage.getMilestonePaymentsByGroupBookingId(groupBookingId as string);
+      return res.json(payments);
+    }
+    
+    if (payerId) {
+      const payments = await storage.getMilestonePaymentsByPayerId(payerId as string);
+      return res.json(payments);
+    }
+    
+    res.json([]);
+  }));
+
+  app.get("/api/milestone-payments/:id", requireAuth, asyncHandler(async (req, res) => {
+    const payment = await storage.getMilestonePayment(req.params.id);
+    if (!payment) {
+      return res.status(404).json({ error: "Milestone payment not found" });
+    }
+    res.json(payment);
+  }));
+
+  app.post("/api/milestone-payments", requireAuth, requireRole('buyer'), asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const validatedData = insertMilestonePaymentSchema.parse(req.body);
+    const payment = await storage.createMilestonePayment(validatedData);
+    
+    await logAudit({
+      userId,
+      action: 'MILESTONE_PAYMENT_CREATED',
+      resourceType: 'milestone_payment',
+      resourceId: payment.id,
+      changes: validatedData,
+      req,
+    });
+
+    res.json(payment);
+  }));
+
+  app.patch("/api/milestone-payments/:id", requireAuth, asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const payment = await storage.updateMilestonePayment(req.params.id, req.body);
+    
+    await logAudit({
+      userId,
+      action: 'MILESTONE_PAYMENT_UPDATED',
+      resourceType: 'milestone_payment',
+      resourceId: req.params.id,
+      changes: req.body,
+      req,
+    });
+
+    res.json(payment);
+  }));
+
+  // Event Reports Routes
+  app.get("/api/event-reports", requireAuth, asyncHandler(async (req, res) => {
+    const { companyId } = req.query;
+    
+    if (companyId) {
+      const reports = await storage.getEventReportsByCompanyId(companyId as string);
+      return res.json(reports);
+    }
+    
+    res.json([]);
+  }));
+
+  app.get("/api/event-reports/:id", requireAuth, asyncHandler(async (req, res) => {
+    const report = await storage.getEventReport(req.params.id);
+    if (!report) {
+      return res.status(404).json({ error: "Event report not found" });
+    }
+    res.json(report);
+  }));
+
+  app.post("/api/event-reports", requireAuth, requireRole('admin'), asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const validatedData = insertEventReportSchema.parse(req.body);
+    const report = await storage.createEventReport(validatedData);
+    
+    await logAudit({
+      userId,
+      action: 'EVENT_REPORT_CREATED',
+      resourceType: 'event_report',
+      resourceId: report.id,
+      changes: validatedData,
+      req,
+    });
+
+    res.json(report);
+  }));
+
+  // Itineraries Routes
+  app.get("/api/itineraries", requireAuth, asyncHandler(async (req, res) => {
+    const { groupBookingId, travelerProfileId } = req.query;
+    
+    if (groupBookingId) {
+      const itineraries = await storage.getItinerariesByGroupBookingId(groupBookingId as string);
+      return res.json(itineraries);
+    }
+    
+    if (travelerProfileId) {
+      const itineraries = await storage.getItinerariesByTravelerProfileId(travelerProfileId as string);
+      return res.json(itineraries);
+    }
+    
+    res.json([]);
+  }));
+
+  app.get("/api/itineraries/:id", requireAuth, asyncHandler(async (req, res) => {
+    const itinerary = await storage.getItinerary(req.params.id);
+    if (!itinerary) {
+      return res.status(404).json({ error: "Itinerary not found" });
+    }
+    res.json(itinerary);
+  }));
+
+  app.post("/api/itineraries", requireAuth, requireRole('buyer'), asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const validatedData = insertItinerarySchema.parse(req.body);
+    const itinerary = await storage.createItinerary(validatedData);
+    
+    await logAudit({
+      userId,
+      action: 'ITINERARY_CREATED',
+      resourceType: 'itinerary',
+      resourceId: itinerary.id,
+      changes: validatedData,
+      req,
+    });
+
+    res.json(itinerary);
+  }));
+
+  app.patch("/api/itineraries/:id", requireAuth, asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const itinerary = await storage.updateItinerary(req.params.id, req.body);
+    
+    await logAudit({
+      userId,
+      action: 'ITINERARY_UPDATED',
+      resourceType: 'itinerary',
+      resourceId: req.params.id,
+      changes: req.body,
+      req,
+    });
+
+    res.json(itinerary);
+  }));
+
+  // Disruption Alerts Routes
+  app.get("/api/disruption-alerts", requireAuth, asyncHandler(async (req, res) => {
+    const { itineraryId, activeOnly } = req.query;
+    
+    if (itineraryId) {
+      const alerts = activeOnly === 'true'
+        ? await storage.getActiveDisruptionAlerts(itineraryId as string)
+        : await storage.getDisruptionAlertsByItineraryId(itineraryId as string);
+      return res.json(alerts);
+    }
+    
+    res.json([]);
+  }));
+
+  app.get("/api/disruption-alerts/:id", requireAuth, asyncHandler(async (req, res) => {
+    const alert = await storage.getDisruptionAlert(req.params.id);
+    if (!alert) {
+      return res.status(404).json({ error: "Disruption alert not found" });
+    }
+    res.json(alert);
+  }));
+
+  app.post("/api/disruption-alerts", requireAuth, asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const validatedData = insertDisruptionAlertSchema.parse(req.body);
+    const alert = await storage.createDisruptionAlert(validatedData);
+    
+    await logAudit({
+      userId,
+      action: 'DISRUPTION_ALERT_CREATED',
+      resourceType: 'disruption_alert',
+      resourceId: alert.id,
+      changes: validatedData,
+      req,
+    });
+
+    res.json(alert);
+  }));
+
+  app.patch("/api/disruption-alerts/:id", requireAuth, asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const alert = await storage.updateDisruptionAlert(req.params.id, req.body);
+    
+    await logAudit({
+      userId,
+      action: 'DISRUPTION_ALERT_UPDATED',
+      resourceType: 'disruption_alert',
+      resourceId: req.params.id,
+      changes: req.body,
+      req,
+    });
+
+    res.json(alert);
+  }));
+
+  // DMC Partners Routes
+  app.get("/api/dmc-partners", requireAuth, asyncHandler(async (req, res) => {
+    const { providerId, destination, verifiedOnly } = req.query;
+    
+    if (verifiedOnly === 'true') {
+      const partners = await storage.getVerifiedDmcPartners();
+      return res.json(partners);
+    }
+    
+    if (providerId) {
+      const partners = await storage.getDmcPartnersByProviderId(providerId as string);
+      return res.json(partners);
+    }
+    
+    if (destination) {
+      const partners = await storage.getDmcPartnersByDestination(destination as string);
+      return res.json(partners);
+    }
+    
+    res.json([]);
+  }));
+
+  app.get("/api/dmc-partners/:id", requireAuth, asyncHandler(async (req, res) => {
+    const partner = await storage.getDmcPartner(req.params.id);
+    if (!partner) {
+      return res.status(404).json({ error: "DMC partner not found" });
+    }
+    res.json(partner);
+  }));
+
+  app.post("/api/dmc-partners", requireAuth, requireRole('provider'), asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const validatedData = insertDmcPartnerSchema.parse(req.body);
+    const partner = await storage.createDmcPartner(validatedData);
+    
+    await logAudit({
+      userId,
+      action: 'DMC_PARTNER_CREATED',
+      resourceType: 'dmc_partner',
+      resourceId: partner.id,
+      changes: validatedData,
+      req,
+    });
+
+    res.json(partner);
+  }));
+
+  app.patch("/api/dmc-partners/:id", requireAuth, asyncHandler(async (req, res) => {
+    const userId = req.session.userId!;
+    const partner = await storage.updateDmcPartner(req.params.id, req.body);
+    
+    await logAudit({
+      userId,
+      action: 'DMC_PARTNER_UPDATED',
+      resourceType: 'dmc_partner',
+      resourceId: req.params.id,
+      changes: req.body,
+      req,
+    });
+
+    res.json(partner);
   }));
 
   const httpServer = createServer(app);
