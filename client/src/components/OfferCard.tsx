@@ -8,6 +8,7 @@ import { useTranslation, formatCurrency } from '@/lib/i18n';
 import { useApp } from '@/contexts/AppContext';
 import { CheckCircle2, Clock, Star, Shield } from 'lucide-react';
 import { useState } from 'react';
+import { useLocation } from 'wouter';
 
 interface OfferCardProps {
   offer: Offer & { provider: Provider };
@@ -19,6 +20,7 @@ interface OfferCardProps {
 export function OfferCard({ offer, onAccept, onDecline, showActions = true }: OfferCardProps) {
   const { locale } = useApp();
   const { t } = useTranslation(locale);
+  const [, setLocation] = useLocation();
   const [expanded, setExpanded] = useState(false);
 
   const aiScore = offer.aiScore ? parseFloat(offer.aiScore.toString()) : 0;
@@ -49,7 +51,13 @@ export function OfferCard({ offer, onAccept, onDecline, showActions = true }: Of
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1 min-w-0">
                 <h3 className="font-semibold text-base flex items-center gap-2">
-                  <span className="truncate" data-testid="text-provider-name">{offer.provider.displayName}</span>
+                  <button
+                    onClick={() => setLocation(`/provider/${offer.provider.id}`)}
+                    className="truncate text-primary hover:underline cursor-pointer"
+                    data-testid="link-provider-profile"
+                  >
+                    {offer.provider.displayName}
+                  </button>
                   {offer.provider.verified && (
                     <Badge variant="secondary" className="bg-accent text-accent-foreground">
                       <CheckCircle2 className="w-3 h-3 mr-1" />
