@@ -7,7 +7,7 @@ import { useLocation } from 'wouter';
 import { useMutation } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Briefcase, LogOut, LogIn, UserPlus, Building2, Palmtree, BarChart3, Settings, Package, Heart, ShoppingBag } from 'lucide-react';
+import { Plus, Briefcase, LogOut, LogIn, UserPlus, Building2, Palmtree, BarChart3, Settings, Package, Heart, ShoppingBag, Shield } from 'lucide-react';
 
 export function Header() {
   const { locale, currentUser, setCurrentUser } = useApp();
@@ -113,14 +113,24 @@ export function Header() {
                 Favorites
               </Button>
               {currentUser.role === 'admin' && (
-                <Button
-                  variant={location.startsWith('/analytics') ? 'secondary' : 'ghost'}
-                  onClick={() => setLocation('/analytics')}
-                  data-testid="nav-analytics"
-                >
-                  <BarChart3 className="w-4 h-4 mr-2" />
-                  Analytics
-                </Button>
+                <>
+                  <Button
+                    variant={location.startsWith('/analytics') ? 'secondary' : 'ghost'}
+                    onClick={() => setLocation('/analytics')}
+                    data-testid="nav-analytics"
+                  >
+                    <BarChart3 className="w-4 h-4 mr-2" />
+                    Analytics
+                  </Button>
+                  <Button
+                    variant={location.startsWith('/admin/audit-logs') ? 'secondary' : 'ghost'}
+                    onClick={() => setLocation('/admin/audit-logs')}
+                    data-testid="nav-audit-logs"
+                  >
+                    <Shield className="w-4 h-4 mr-2" />
+                    Audit Logs
+                  </Button>
+                </>
               )}
               <Button
                 variant={location.startsWith('/enterprise') ? 'secondary' : 'ghost'}

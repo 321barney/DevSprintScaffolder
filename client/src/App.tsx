@@ -23,6 +23,7 @@ import MeetingsEvents from "@/pages/MeetingsEvents";
 import Bleisure from "@/pages/Bleisure";
 import Analytics from "@/pages/Analytics";
 import EnterpriseSettings from "@/pages/EnterpriseSettings";
+import AdminAuditLogs from "@/pages/AdminAuditLogs";
 import Login from "@/pages/Login";
 import Signup from "@/pages/Signup";
 import NotFound from "@/pages/not-found";
@@ -56,6 +57,7 @@ function Router() {
           <Route path="/bleisure" component={Bleisure} />
           <Route path="/analytics" component={Analytics} />
           <Route path="/enterprise" component={EnterpriseSettings} />
+          <Route path="/admin/audit-logs" component={AdminAuditLogs} />
           <Route component={NotFound} />
         </Switch>
       </div>
