@@ -54,14 +54,25 @@ export function verifyCallbackSignature(
   callbackData: Record<string, any>,
   signature: string
 ): boolean {
-  // Recreate the signature from callback data
-  const dataString = JSON.stringify(callbackData);
-  const expectedSignature = generateSignature(dataString, PSP_SECRET_KEY);
-  
-  return crypto.timingSafeEqual(
-    Buffer.from(signature),
-    Buffer.from(expectedSignature)
-  );
+  try {
+    // Recreate the signature from callback data
+    const dataString = JSON.stringify(callbackData);
+    const expectedSignature = generateSignature(dataString, PSP_SECRET_KEY);
+    
+    const signatureBuffer = Buffer.from(signature);
+    const expectedBuffer = Buffer.from(expectedSignature);
+    
+    // Check equal length before timingSafeEqual to prevent DoS
+    if (signatureBuffer.length !== expectedBuffer.length) {
+      return false;
+    }
+    
+    return crypto.timingSafeEqual(signatureBuffer, expectedBuffer);
+  } catch (error) {
+    // Return false on any errors instead of crashing the callback handler
+    console.error('Signature verification error:', error);
+    return false;
+  }
 }
 
 // Test mode PSP (for development)
