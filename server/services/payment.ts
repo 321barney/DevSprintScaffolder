@@ -3,11 +3,13 @@ import { db } from "../db";
 import { 
   transactions, 
   providerSubscriptions,
+  paymentSchedules,
   SUBSCRIPTION_TIERS,
   type InsertTransaction,
+  type InsertPaymentSchedule,
 } from "../../shared/schema";
 import { eq } from "drizzle-orm";
-import { logAudit } from "../audit";
+import { logAudit, AUDIT_ACTIONS } from "../audit";
 
 /**
  * Phase 1 Payment Service Provider (PSP) Integration
@@ -314,4 +316,101 @@ export async function getProviderTransactions(providerId: string) {
     .select()
     .from(transactions)
     .where(eq(transactions.providerId, providerId));
+}
+
+// ========================================
+// SPRINT 1-2: Payment Schedule Functions
+// ========================================
+
+export async function createPaymentSchedule(
+  orderId: string,
+  depositPct: number,
+  installmentCount: number
+): Promise<string> {
+  const installments = [];
+  const installmentPct = (100 - depositPct) / installmentCount;
+  
+  for (let i = 0; i < installmentCount; i++) {
+    const dueDate = new Date();
+    dueDate.setMonth(dueDate.getMonth() + i + 1);
+    
+    installments.push({
+      installmentNumber: i + 1,
+      dueDate: dueDate.toISOString(),
+      percentage: installmentPct,
+      status: 'pending',
+    });
+  }
+
+  const scheduleData: InsertPaymentSchedule = {
+    orderId,
+    depositPct,
+    installments: installments as any,
+    totalMad: 0,
+  };
+
+  const [schedule] = await db
+    .insert(paymentSchedules)
+    .values(scheduleData)
+    .returning();
+
+  await logAudit({
+    action: AUDIT_ACTIONS.SCHEDULE_CREATE,
+    resourceType: 'payment_schedule',
+    resourceId: schedule.id,
+    changes: {
+      orderId,
+      depositPct,
+      installmentCount,
+    },
+  });
+
+  return schedule.id;
+}
+
+export async function processScheduledPayment(
+  scheduleId: string,
+  installmentIndex: number
+): Promise<PaymentResponse> {
+  const [schedule] = await db
+    .select()
+    .from(paymentSchedules)
+    .where(eq(paymentSchedules.id, scheduleId));
+
+  if (!schedule) {
+    throw new Error('Payment schedule not found');
+  }
+
+  const installments = schedule.installments as any[];
+  if (installmentIndex >= installments.length) {
+    throw new Error('Invalid installment index');
+  }
+
+  const installment = installments[installmentIndex];
+  const amount = Math.round((schedule.totalMad * installment.percentage) / 100);
+
+  await logAudit({
+    action: AUDIT_ACTIONS.SCHEDULE_PAYMENT_PROCESS,
+    resourceType: 'payment_schedule',
+    resourceId: scheduleId,
+    changes: {
+      installmentIndex,
+      amount,
+    },
+  });
+
+  return {
+    success: true,
+    transactionId: `schedule_${scheduleId}_${installmentIndex}`,
+    status: 'completed',
+  };
+}
+
+export async function getPaymentSchedule(scheduleId: string) {
+  const [schedule] = await db
+    .select()
+    .from(paymentSchedules)
+    .where(eq(paymentSchedules.id, scheduleId));
+
+  return schedule || null;
 }

@@ -2055,3 +2055,115 @@ export type InsertSsoConnection = z.infer<typeof insertSsoConnectionSchema>;
 
 export type EmployeeSyncLog = typeof employeeSyncLogs.$inferSelect;
 export type InsertEmployeeSyncLog = z.infer<typeof insertEmployeeSyncLogSchema>;
+
+// ========================================
+// SPRINT 1-2: Payment Service Core Enhancement
+// ========================================
+
+// Payment Schedules - Installment payment plans for orders
+export const paymentSchedules = pgTable("payment_schedules", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  orderId: uuid("order_id").references(() => packageOrders.id).notNull(),
+  depositPct: integer("deposit_pct").notNull(), // Deposit percentage (e.g., 30)
+  installments: jsonb("installments").notNull(), // Array of {dueDate, amountMad, status}
+  totalMad: integer("total_mad").notNull(),
+  status: text("status").default("active").notNull().$type<"active" | "completed" | "cancelled">(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const paymentSchedulesRelations = relations(paymentSchedules, ({ one }) => ({
+  order: one(packageOrders, {
+    fields: [paymentSchedules.orderId],
+    references: [packageOrders.id],
+  }),
+}));
+
+// Escrow Ledger - Hold and release funds
+export const escrowLedger = pgTable("escrow_ledger", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  transactionId: uuid("transaction_id").references(() => transactions.id).notNull(),
+  heldAmount: integer("held_amount").notNull(), // Amount held in MAD
+  releaseDate: timestamp("release_date"), // Scheduled release date
+  status: text("status").default("held").notNull().$type<"held" | "released" | "refunded">(),
+  releasedAt: timestamp("released_at"),
+  releaseReason: text("release_reason"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const escrowLedgerRelations = relations(escrowLedger, ({ one }) => ({
+  transaction: one(transactions, {
+    fields: [escrowLedger.transactionId],
+    references: [transactions.id],
+  }),
+}));
+
+// Invoices - Multi-currency invoices with VAT
+export const invoices = pgTable("invoices", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  orderId: uuid("order_id").references(() => packageOrders.id).notNull(),
+  invoiceNumber: text("invoice_number").unique().notNull(),
+  locale: text("locale").notNull().$type<"fr-MA" | "ar-MA" | "en-US">(), // FR/AR/EN support
+  currency: text("currency").default("MAD").notNull().$type<"MAD" | "EUR">(),
+  subtotal: integer("subtotal").notNull(), // Subtotal before VAT
+  vatAmount: integer("vat_amount").notNull(), // VAT amount (20% for Morocco)
+  total: integer("total").notNull(), // Total including VAT
+  pdfUrl: text("pdf_url"), // URL to generated PDF invoice
+  metadata: jsonb("metadata"), // Additional invoice data
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const invoicesRelations = relations(invoices, ({ one }) => ({
+  order: one(packageOrders, {
+    fields: [invoices.orderId],
+    references: [packageOrders.id],
+  }),
+}));
+
+// Currency Rates - Exchange rates for MAD/EUR conversion
+export const currencyRates = pgTable("currency_rates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  fromCurrency: text("from_currency").notNull(),
+  toCurrency: text("to_currency").notNull(),
+  rate: decimal("rate", { precision: 10, scale: 6 }).notNull(), // e.g., 0.092 for MAD to EUR
+  effectiveDate: timestamp("effective_date").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Insert Schemas
+export const insertPaymentScheduleSchema = createInsertSchema(paymentSchedules).omit({ 
+  id: true, 
+  createdAt: true,
+  updatedAt: true,
+  status: true,
+});
+
+export const insertEscrowLedgerSchema = createInsertSchema(escrowLedger).omit({ 
+  id: true, 
+  createdAt: true,
+  status: true,
+  releasedAt: true,
+});
+
+export const insertInvoiceSchema = createInsertSchema(invoices).omit({ 
+  id: true, 
+  createdAt: true,
+});
+
+export const insertCurrencyRateSchema = createInsertSchema(currencyRates).omit({ 
+  id: true, 
+  updatedAt: true,
+});
+
+// Select Types
+export type PaymentSchedule = typeof paymentSchedules.$inferSelect;
+export type InsertPaymentSchedule = z.infer<typeof insertPaymentScheduleSchema>;
+
+export type EscrowLedger = typeof escrowLedger.$inferSelect;
+export type InsertEscrowLedger = z.infer<typeof insertEscrowLedgerSchema>;
+
+export type Invoice = typeof invoices.$inferSelect;
+export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
+
+export type CurrencyRate = typeof currencyRates.$inferSelect;
+export type InsertCurrencyRate = z.infer<typeof insertCurrencyRateSchema>;

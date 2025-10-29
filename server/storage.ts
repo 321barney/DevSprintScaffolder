@@ -1,6 +1,6 @@
 // Storage interface and implementation using javascript_database blueprint
 import {
-  users, providers, jobs, offers, financingOffers, messages, ratings,
+  users, providers, jobs, offers, financingOffers, messages, ratings, auditLogs,
   platformFees, providerSubscriptions, transactions, providerEarnings,
   providerProfiles, vehicles, providerDocuments, trips, tripTracks,
   companies, costCenters, travelerProfiles, venues, venueRooms, rfps, quotes, groupBookings, approvals,
@@ -10,6 +10,7 @@ import {
   bleisurePackages, coworkingSpaces, bleisureBookings, savingsAttributions, cohortAnalyses,
   hrisSyncConfigs, ssoConnections, employeeSyncLogs,
   servicePackages, favorites, packageOrders,
+  paymentSchedules, escrowLedger, invoices, currencyRates,
   type User, type InsertUser,
   type Provider, type InsertProvider,
   type Job, type InsertJob,
@@ -17,6 +18,7 @@ import {
   type FinancingOffer, type InsertFinancingOffer,
   type Message, type InsertMessage,
   type Rating, type InsertRating,
+  type AuditLog,
   type PlatformFee, type InsertPlatformFee,
   type ProviderSubscription, type InsertProviderSubscription,
   type Transaction, type InsertTransaction,
@@ -105,6 +107,10 @@ export interface IStorage {
   getRatingsByJobId(jobId: string): Promise<Rating[]>;
   getRatingsByRateeId(rateeId: string): Promise<Rating[]>;
   createRating(rating: InsertRating): Promise<Rating>;
+
+  // Audit Logs
+  getAuditLogs(filters: { userId?: string; action?: string; resourceType?: string; resourceId?: string; startDate?: Date; endDate?: Date; limit?: number; offset?: number }): Promise<AuditLog[]>;
+  getAuditLogsByResource(resourceType: string, resourceId: string): Promise<AuditLog[]>;
 
   // Phase 1: Platform Fees
   createPlatformFee(fee: InsertPlatformFee): Promise<PlatformFee>;
@@ -316,6 +322,24 @@ export interface IStorage {
   getServicePackagesByProvider(providerId: string): Promise<ServicePackage[]>;
   getServicePackages(filters?: { category?: string; active?: boolean; search?: string }): Promise<ServicePackage[]>;
   updateServicePackage(id: string, data: Partial<InsertServicePackage>): Promise<ServicePackage | undefined>;
+
+  // Sprint 1-2: Payment Enhancement Tables
+  createPaymentSchedule(data: any): Promise<any>;
+  getPaymentSchedule(id: string): Promise<any | undefined>;
+  getPaymentSchedulesByOrderId(orderId: string): Promise<any[]>;
+  updatePaymentSchedule(id: string, data: any): Promise<any | undefined>;
+
+  createEscrowEntry(data: any): Promise<any>;
+  getEscrowEntry(id: string): Promise<any | undefined>;
+  getEscrowEntriesByTransactionId(transactionId: string): Promise<any[]>;
+  updateEscrowEntry(id: string, data: any): Promise<any | undefined>;
+
+  createInvoice(data: any): Promise<any>;
+  getInvoice(id: string): Promise<any | undefined>;
+  getInvoiceByOrderId(orderId: string): Promise<any | undefined>;
+
+  createCurrencyRate(data: any): Promise<any>;
+  getLatestCurrencyRate(fromCurrency: string, toCurrency: string): Promise<any | undefined>;
   deleteServicePackage(id: string): Promise<void>;
   incrementPackageViews(id: string): Promise<void>;
 
@@ -515,6 +539,74 @@ export class DatabaseStorage implements IStorage {
       .values(insertRating)
       .returning();
     return rating;
+  }
+
+  // Audit Logs
+  async getAuditLogs(filters: { 
+    userId?: string; 
+    action?: string; 
+    resourceType?: string; 
+    resourceId?: string; 
+    startDate?: Date; 
+    endDate?: Date; 
+    limit?: number; 
+    offset?: number 
+  }): Promise<AuditLog[]> {
+    const conditions = [];
+    
+    if (filters.userId) {
+      conditions.push(eq(auditLogs.userId, filters.userId));
+    }
+    
+    if (filters.action) {
+      conditions.push(eq(auditLogs.action, filters.action));
+    }
+    
+    if (filters.resourceType) {
+      conditions.push(eq(auditLogs.resourceType, filters.resourceType));
+    }
+    
+    if (filters.resourceId) {
+      conditions.push(eq(auditLogs.resourceId, filters.resourceId));
+    }
+    
+    if (filters.startDate) {
+      conditions.push(gte(auditLogs.createdAt, filters.startDate));
+    }
+    
+    if (filters.endDate) {
+      conditions.push(lte(auditLogs.createdAt, filters.endDate));
+    }
+    
+    let query = db
+      .select()
+      .from(auditLogs)
+      .orderBy(desc(auditLogs.createdAt));
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    if (filters.limit) {
+      query = query.limit(filters.limit);
+    }
+    
+    if (filters.offset) {
+      query = query.offset(filters.offset);
+    }
+    
+    return await query;
+  }
+
+  async getAuditLogsByResource(resourceType: string, resourceId: string): Promise<AuditLog[]> {
+    return await db
+      .select()
+      .from(auditLogs)
+      .where(and(
+        eq(auditLogs.resourceType, resourceType),
+        eq(auditLogs.resourceId, resourceId)
+      ))
+      .orderBy(desc(auditLogs.createdAt));
   }
 
   // Phase 1: Platform Fees
@@ -1687,6 +1779,75 @@ export class DatabaseStorage implements IStorage {
       .where(eq(packageOrders.id, id))
       .returning();
     return order || undefined;
+  }
+
+  // Sprint 1-2: Payment Enhancement Storage Methods
+  async createPaymentSchedule(data: any): Promise<any> {
+    const [schedule] = await db.insert(paymentSchedules).values(data).returning();
+    return schedule;
+  }
+
+  async getPaymentSchedule(id: string): Promise<any | undefined> {
+    const [schedule] = await db.select().from(paymentSchedules).where(eq(paymentSchedules.id, id));
+    return schedule || undefined;
+  }
+
+  async getPaymentSchedulesByOrderId(orderId: string): Promise<any[]> {
+    return await db.select().from(paymentSchedules).where(eq(paymentSchedules.orderId, orderId));
+  }
+
+  async updatePaymentSchedule(id: string, data: any): Promise<any | undefined> {
+    const [schedule] = await db.update(paymentSchedules).set(data).where(eq(paymentSchedules.id, id)).returning();
+    return schedule || undefined;
+  }
+
+  async createEscrowEntry(data: any): Promise<any> {
+    const [entry] = await db.insert(escrowLedger).values(data).returning();
+    return entry;
+  }
+
+  async getEscrowEntry(id: string): Promise<any | undefined> {
+    const [entry] = await db.select().from(escrowLedger).where(eq(escrowLedger.id, id));
+    return entry || undefined;
+  }
+
+  async getEscrowEntriesByTransactionId(transactionId: string): Promise<any[]> {
+    return await db.select().from(escrowLedger).where(eq(escrowLedger.transactionId, transactionId));
+  }
+
+  async updateEscrowEntry(id: string, data: any): Promise<any | undefined> {
+    const [entry] = await db.update(escrowLedger).set(data).where(eq(escrowLedger.id, id)).returning();
+    return entry || undefined;
+  }
+
+  async createInvoice(data: any): Promise<any> {
+    const [invoice] = await db.insert(invoices).values(data).returning();
+    return invoice;
+  }
+
+  async getInvoice(id: string): Promise<any | undefined> {
+    const [invoice] = await db.select().from(invoices).where(eq(invoices.id, id));
+    return invoice || undefined;
+  }
+
+  async getInvoiceByOrderId(orderId: string): Promise<any | undefined> {
+    const [invoice] = await db.select().from(invoices).where(eq(invoices.orderId, orderId));
+    return invoice || undefined;
+  }
+
+  async createCurrencyRate(data: any): Promise<any> {
+    const [rate] = await db.insert(currencyRates).values(data).returning();
+    return rate;
+  }
+
+  async getLatestCurrencyRate(fromCurrency: string, toCurrency: string): Promise<any | undefined> {
+    const [rate] = await db
+      .select()
+      .from(currencyRates)
+      .where(and(eq(currencyRates.fromCurrency, fromCurrency), eq(currencyRates.toCurrency, toCurrency)))
+      .orderBy(desc(currencyRates.effectiveDate))
+      .limit(1);
+    return rate || undefined;
   }
 }
 

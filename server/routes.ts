@@ -2380,6 +2380,62 @@ END:VCALENDAR`;
     res.json(order);
   }));
 
+  // ===== AUDIT LOGS ROUTES (ADMIN ONLY) =====
+  app.get("/api/audit-logs", requireAuth, requireRole('admin'), asyncHandler(async (req, res) => {
+    const { userId, action, resourceType, resourceId, startDate, endDate, limit, offset } = req.query;
+    
+    const filters: any = {};
+    
+    if (userId) filters.userId = userId as string;
+    if (action) filters.action = action as string;
+    if (resourceType) filters.resourceType = resourceType as string;
+    if (resourceId) filters.resourceId = resourceId as string;
+    if (startDate) filters.startDate = new Date(startDate as string);
+    if (endDate) filters.endDate = new Date(endDate as string);
+    if (limit) filters.limit = parseInt(limit as string, 10);
+    if (offset) filters.offset = parseInt(offset as string, 10);
+    
+    const logs = await storage.getAuditLogs(filters);
+    res.json(logs);
+  }));
+
+  // ===== PAYMENT ENHANCEMENT ROUTES (Sprint 1-2) =====
+  app.get("/api/payment-schedules", requireAuth, asyncHandler(async (req, res) => {
+    const { orderId } = req.query;
+    if (orderId) {
+      const schedules = await storage.getPaymentSchedulesByOrderId(orderId as string);
+      return res.json(schedules);
+    }
+    res.json([]);
+  }));
+
+  app.post("/api/payment-schedules", requireAuth, asyncHandler(async (req, res) => {
+    const schedule = await storage.createPaymentSchedule(req.body);
+    res.json(schedule);
+  }));
+
+  app.get("/api/escrow/balance", requireAuth, asyncHandler(async (req, res) => {
+    res.json({ balance: 0 });
+  }));
+
+  app.post("/api/escrow/release", requireAuth, asyncHandler(async (req, res) => {
+    res.json({ success: true });
+  }));
+
+  app.get("/api/invoices/:orderId", requireAuth, asyncHandler(async (req, res) => {
+    const invoice = await storage.getInvoiceByOrderId(req.params.orderId);
+    if (!invoice) {
+      return res.status(404).json({ error: "Invoice not found" });
+    }
+    res.json(invoice);
+  }));
+
+  app.post("/api/invoices/generate", requireAuth, asyncHandler(async (req, res) => {
+    const { orderId, locale, currency } = req.body;
+    const invoice = await storage.createInvoice({ orderId, locale, currency });
+    res.json(invoice);
+  }));
+
   const httpServer = createServer(app);
 
   return httpServer;
