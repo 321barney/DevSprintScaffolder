@@ -20,6 +20,10 @@ export default function Login() {
     password: '',
   });
 
+  // Get return URL from query params
+  const urlParams = new URLSearchParams(window.location.search);
+  const returnUrl = urlParams.get('returnUrl') || '/jobs';
+
   const loginMutation = useMutation({
     mutationFn: async (data: { email: string; password: string }) => {
       const response = await apiRequest('POST', '/api/auth/login', data);
@@ -31,7 +35,8 @@ export default function Login() {
         title: t('auth.login.success'),
         description: t('auth.login.success.message'),
       });
-      setLocation('/jobs');
+      // Redirect to return URL or default to /jobs
+      setLocation(decodeURIComponent(returnUrl));
     },
     onError: (error: Error) => {
       toast({

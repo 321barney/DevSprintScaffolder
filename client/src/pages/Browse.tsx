@@ -50,10 +50,25 @@ export default function Browse() {
     queryKey: ["/api/jobs"],
   });
 
+  const { data: venuesData, isLoading: venuesLoading } = useQuery({
+    queryKey: ["/api/venues"],
+  });
+
+  const { data: bleisureData, isLoading: bleisureLoading } = useQuery({
+    queryKey: ["/api/bleisure-packages"],
+  });
+
+  const { data: servicePackagesData, isLoading: servicePackagesLoading } = useQuery({
+    queryKey: ["/api/service-packages"],
+  });
+
   const providers = (providersData as Provider[]) || [];
   const jobs = (jobsData as Job[]) || [];
+  const venues = (venuesData as any[]) || [];
+  const bleisurePackages = (bleisureData as any[]) || [];
+  const servicePackages = (servicePackagesData as any[]) || [];
 
-  const isLoading = providersLoading || jobsLoading;
+  const isLoading = providersLoading || jobsLoading || venuesLoading || bleisureLoading || servicePackagesLoading;
 
   if (isLoading) {
     return (
@@ -123,11 +138,23 @@ export default function Browse() {
           <MapView
             providers={providers}
             jobs={jobs}
+            venues={venues}
+            bleisurePackages={bleisurePackages}
+            servicePackages={servicePackages}
             onProviderClick={(provider) => {
               navigate(`/provider/${provider.id}`);
             }}
             onJobClick={(job) => {
               navigate(`/jobs/${job.id}`);
+            }}
+            onVenueClick={(venue) => {
+              navigate(`/mice`);
+            }}
+            onBleisureClick={(pkg) => {
+              navigate(`/bleisure`);
+            }}
+            onServicePackageClick={(pkg) => {
+              navigate(`/packages/${pkg.id}`);
             }}
           />
         ) : (

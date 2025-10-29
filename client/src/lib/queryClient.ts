@@ -2,6 +2,17 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
+    // Handle expired session - redirect to login with return URL
+    if (res.status === 401 && typeof window !== 'undefined') {
+      const currentPath = window.location.pathname + window.location.search;
+      // Only redirect if not already on auth pages
+      if (!currentPath.startsWith('/login') && !currentPath.startsWith('/signup')) {
+        const returnUrl = encodeURIComponent(currentPath);
+        window.location.href = `/login?returnUrl=${returnUrl}`;
+        // Still throw to prevent the rest of the code from executing
+        throw new Error('Session expired - redirecting to login');
+      }
+    }
     const text = (await res.text()) || res.statusText;
     throw new Error(`${res.status}: ${text}`);
   }
